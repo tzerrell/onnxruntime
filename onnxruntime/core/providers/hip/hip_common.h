@@ -9,6 +9,7 @@
 //#include <hiprand/hiprand.h>
 
 #include "core/common/status.h"
+#include "core/framework/op_kernel.h"
 #include "core/framework/data_transfer_manager.h"
 #include "core/graph/graph_viewer.h"
 #include "core/util/math.h"
@@ -16,7 +17,6 @@
 #include "core/providers/hip/fast_divmod.h"
 #include "core/providers/hip/hip_call.h"
 #include "core/providers/hip/hip_execution_provider.h"
-#include "core/providers/hip/hip_kernel.h"
 
 
 namespace onnxruntime {
@@ -53,6 +53,163 @@ namespace hip {
                           : ORT_MAKE_STATUS(ONNXRUNTIME, FAIL, "CUDNN2 error executing ", #expr))
 */
 
+template <typename T>
+KernelCreateInfo BuildKernelCreateInfo();
+
+// -----------------------------------------------------------------------
+// Base class for HIP kernels
+// -----------------------------------------------------------------------
+class HipKernel : public OpKernel {
+ public:
+  explicit HipKernel(const OpKernelInfo& info)
+      : OpKernel(info),
+        // Is this OK to have a non-const execution provider?
+        provider_(const_cast<HIPExecutionProvider*>(dynamic_cast<const HIPExecutionProvider*>(info.GetExecutionProvider()))) {
+  }
+
+  Status Compute(OpKernelContext* p_op_kernel_context) const override {
+    auto s = ComputeInternal(p_op_kernel_context);
+    // use this to precisely locate the node where HIP failure comes from
+    //  if (hipSuccess != hipDeviceSynchronize())
+    //    __debugbreak();
+
+    if (s.IsOK()) {
+      auto err = hipGetLastError();
+      if (err != hipSuccess) {
+        s = ORT_MAKE_STATUS(ONNXRUNTIME, FAIL, "HIP error ", hipGetErrorName(err), ":", hipGetErrorString(err));
+      }
+    }
+
+    return s;
+  }
+
+  virtual Status ComputeInternal(OpKernelContext* p_op_kernel_context) const = 0;
+
+  template <typename T>
+  inline IAllocatorUniquePtr<T> AllocateBufferOnCPUPinned(size_t count_or_bytes) const {
+    AllocatorPtr allocator = provider_->GetAllocator(CPU_ALLOCATOR_DEVICE_ID, OrtMemTypeCPU);
+    if (!allocator)
+      return nullptr;
+    return IAllocator::MakeUniquePtr<T>(allocator, count_or_bytes);
+  }
+
+  template <typename T>
+  inline IAllocatorUniquePtr<T> GetScratchBuffer(size_t count_or_bytes) const {
+    return provider_->GetScratchBuffer<T>(count_or_bytes);
+  }
+
+  inline void AddDeferredReleaseCPUPtr(void* p) const {
+    provider_->AddDeferredReleaseCPUPtr(p);
+  }
+
+  // To support hipMemcpyAsync, the cpu memory should be allocated in pinned memory
+  // and it can only be released after the copy has finished
+  template <typename T>
+  class HipAsyncBuffer {
+   public:
+    HipAsyncBuffer(const HipKernel* op_kernel) : gpu_copy_(nullptr), count_(0), op_kernel_(op_kernel) {}
+
+    HipAsyncBuffer(const HipKernel* op_kernel, size_t count) : HipAsyncBuffer(op_kernel) {
+      AllocCpuPtr(count);
+    }
+
+    HipAsyncBuffer(const HipKernel* op_kernel, const T& value, size_t count)
+        : HipAsyncBuffer(op_kernel, count) {
+      T* p = CpuPtr();
+      for (size_t i = 0; i != count; ++i) {
+        *p++ = value;
+      }
+    }
+
+    HipAsyncBuffer(const HipKernel* op_kernel, const std::vector<T>& vec) : HipAsyncBuffer(op_kernel, vec.size()) {
+      memcpy(CpuPtr(), vec.data(), vec.size() * sizeof(T));
+    }
+
+    void AllocCpuPtr(size_t count) {
+      cpu_pinned_copy_ = op_kernel_->AllocateBufferOnCPUPinned<T>(count);
+      if (cpu_pinned_copy_ == nullptr)
+        throw std::runtime_error("alloc failed");
+      count_ = count;
+    }
+
+    Status CopyToGpu() {
+      if (cpu_pinned_copy_) {
+        gpu_copy_ = op_kernel_->GetScratchBuffer<T>(count_);
+        HIP_RETURN_IF_ERROR(hipMemcpyAsync(gpu_copy_.get(), cpu_pinned_copy_.get(), count_ * sizeof(T), hipMemcpyHostToDevice));
+        op_kernel_->AddDeferredReleaseCPUPtr(cpu_pinned_copy_.release());
+      }
+      return Status::OK();
+    }
+
+    T* CpuPtr() const {
+      return cpu_pinned_copy_.get();
+    }
+
+    gsl::span<T> CpuSpan() const {
+      return gsl::span<T>(CpuPtr(), count_);
+    }
+
+    T* GpuPtr() const {
+      return gpu_copy_.get();
+    }
+
+    size_t count() const {
+      return count_;
+    }
+
+   protected:
+    IAllocatorUniquePtr<T> gpu_copy_;
+    IAllocatorUniquePtr<T> cpu_pinned_copy_;
+    size_t count_;
+    const HipKernel* op_kernel_;
+  };
+
+ protected:
+  inline hipblasHandle_t HipblasHandle() const {
+    return provider_->PerThreadHipblasHandle();
+  }
+
+  // inline hipdnnHandle_t CudnnHandle() const {
+  //   return provider_->PerThreadCudnnHandle();
+  // }
+  // inline hiprandGenerator_t CurandGenerator() const {
+  //   return provider_->PerThreadCurandGenerator();
+  // }
+
+  // template <typename T>
+  // inline const T* GetConstOnes(size_t count) const {
+  //   return provider_->template GetConstOnes<T>(count);
+  // }
+
+  inline Status CopyTensor(const Tensor& src, Tensor& dst) const {
+    return Info().GetDataTransferManager().CopyTensor(src, dst);
+  }
+
+  inline int GetDeviceId() const { return provider_->GetDeviceId(); }
+
+ private:
+  HIPExecutionProvider* provider_;
+};
+
+// Type mapping for MLFloat16 to half
+template <typename T>
+class ToHipType {
+ public:
+  typedef T MappedType;
+  static MappedType FromFloat(float f) {
+    return static_cast<T>(f);
+  }
+};
+
+// template <>
+// class ToHipType<MLFloat16> {
+//  public:
+//   typedef hc::half MappedType;
+//   static MappedType FromFloat(float f) {
+//     uint16_t h = math::floatToHalf(f);
+//     return *reinterpret_cast<MappedType*>(&h);
+//   }
+// };
 
 
 inline bool CalculateFdmStrides(gsl::span<fast_divmod> p, const std::vector<int64_t>& dims) {

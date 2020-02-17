@@ -8,7 +8,7 @@ extern "C" {
 #endif
 
 /**
- * \param device_id cuda device id, starts from zero.
+ * \param device_id hip device id, starts from zero.
  */
 ORT_API_STATUS(OrtSessionOptionsAppendExecutionProvider_HIP, _In_ OrtSessionOptions* options, int device_id, size_t cuda_mem_limit);
 

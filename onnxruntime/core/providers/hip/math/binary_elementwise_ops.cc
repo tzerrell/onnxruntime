@@ -224,8 +224,8 @@ BINARY_LOGICALOP_TYPED(Or, 7, bool)
 BINARY_LOGICALOP_TYPED(Xor, 7, bool)
 BINARY_OP_HFD(PRelu, 7)
 
-template <typename T, typename CudaT>
-Status VariadicInputBase<T, CudaT>::ComputeMethod(OpKernelContext* context, ImplCompute Impl_Compute) const {
+template <typename T, typename HipT>
+Status VariadicInputBase<T, HipT>::ComputeMethod(OpKernelContext* context, ImplCompute Impl_Compute) const {
   const auto& node = Node();
   const auto& node_name = node.Name();
   auto input_count = node.InputArgCount().front();
@@ -236,7 +236,7 @@ Status VariadicInputBase<T, CudaT>::ComputeMethod(OpKernelContext* context, Impl
     const auto& input_shape = lhs_tensor->Shape();
     auto output_tensor = context->Output(0, input_shape);
     if (lhs_tensor->DataRaw() != output_tensor->DataRaw()) {
-      HIP_RETURN_IF_ERROR(hipMemcpyAsync(output_tensor->MutableDataRaw(), lhs_tensor->DataRaw(), sizeof(CudaT) * input_shape.Size(), hipMemcpyDeviceToDevice));
+      HIP_RETURN_IF_ERROR(hipMemcpyAsync(output_tensor->MutableDataRaw(), lhs_tensor->DataRaw(), sizeof(HipT) * input_shape.Size(), hipMemcpyDeviceToDevice));
     }
   } else {
     // compute output shape first, using broadcast rule
@@ -256,29 +256,29 @@ Status VariadicInputBase<T, CudaT>::ComputeMethod(OpKernelContext* context, Impl
       Impl_Compute(
           prepare.output_rank_or_simple_broadcast,
           &prepare.lhs_padded_strides,
-          reinterpret_cast<const CudaT*>(prepare.lhs_tensor->template Data<T>()),
+          reinterpret_cast<const HipT*>(prepare.lhs_tensor->template Data<T>()),
           &prepare.rhs_padded_strides,
-          reinterpret_cast<const CudaT*>(prepare.rhs_tensor->template Data<T>()),
+          reinterpret_cast<const HipT*>(prepare.rhs_tensor->template Data<T>()),
           &prepare.fdm_output_strides,
           prepare.fdm_H,
           prepare.fdm_C,
-          reinterpret_cast<CudaT*>(prepare.output_tensor->template MutableData<T>()),
+          reinterpret_cast<HipT*>(prepare.output_tensor->template MutableData<T>()),
           prepare.output_tensor->Shape().Size());
     } else {
       // for more than 2 inputs, we need to accumulate into output tensor, as the shape from input0 + input1 might be different from output shape
-      HIP_RETURN_IF_ERROR(hipMemset(output_tensor->MutableDataRaw(), 0, output_shape.Size() * sizeof(CudaT)));
+      HIP_RETURN_IF_ERROR(hipMemset(output_tensor->MutableDataRaw(), 0, output_shape.Size() * sizeof(HipT)));
 
       ORT_RETURN_IF_ERROR(BinaryElementwiseBroadcastPrepare(output_tensor, lhs_tensor, output_tensor, &prepare));
       Impl_Add(
           prepare.output_rank_or_simple_broadcast,
           &prepare.lhs_padded_strides,
-          reinterpret_cast<const CudaT*>(prepare.lhs_tensor->template Data<T>()),
+          reinterpret_cast<const HipT*>(prepare.lhs_tensor->template Data<T>()),
           &prepare.rhs_padded_strides,
-          reinterpret_cast<const CudaT*>(prepare.rhs_tensor->template Data<T>()),
+          reinterpret_cast<const HipT*>(prepare.rhs_tensor->template Data<T>()),
           &prepare.fdm_output_strides,
           prepare.fdm_H,
           prepare.fdm_C,
-          reinterpret_cast<CudaT*>(prepare.output_tensor->template MutableData<T>()),
+          reinterpret_cast<HipT*>(prepare.output_tensor->template MutableData<T>()),
           prepare.output_tensor->Shape().Size());
 
       for (int index = 1; index < input_count; index++) {
@@ -286,13 +286,13 @@ Status VariadicInputBase<T, CudaT>::ComputeMethod(OpKernelContext* context, Impl
         Impl_Compute(
             prepare.output_rank_or_simple_broadcast,
             &prepare.lhs_padded_strides,
-            reinterpret_cast<const CudaT*>(prepare.lhs_tensor->template Data<T>()),
+            reinterpret_cast<const HipT*>(prepare.lhs_tensor->template Data<T>()),
             &prepare.rhs_padded_strides,
-            reinterpret_cast<const CudaT*>(prepare.rhs_tensor->template Data<T>()),
+            reinterpret_cast<const HipT*>(prepare.rhs_tensor->template Data<T>()),
             &prepare.fdm_output_strides,
             prepare.fdm_H,
             prepare.fdm_C,
-            reinterpret_cast<CudaT*>(prepare.output_tensor->template MutableData<T>()),
+            reinterpret_cast<HipT*>(prepare.output_tensor->template MutableData<T>()),
             prepare.output_tensor->Shape().Size());
       }
     }
@@ -323,8 +323,8 @@ Status Min<T>::ComputeInternal(OpKernelContext* context) const {
 
 //Greater op output tensor type is bool, so it cannot directly fit in the macros
 //for other elementwise ops
-template <typename T, typename CudaT>
-Status CompareFunction<T, CudaT>::CompareMethod(OpKernelContext* context, ImplCompare Impl_Compare) const {
+template <typename T, typename HipT>
+Status CompareFunction<T, HipT>::CompareMethod(OpKernelContext* context, ImplCompare Impl_Compare) const {
   BinaryElementwisePreparation prepare;
   ORT_RETURN_IF_ERROR(Prepare(context, &prepare));
   size_t output_size = prepare.output_tensor->Shape().Size();
@@ -332,17 +332,17 @@ Status CompareFunction<T, CudaT>::CompareMethod(OpKernelContext* context, ImplCo
   Impl_Compare(
       prepare.output_rank_or_simple_broadcast,
       &prepare.lhs_padded_strides,
-      reinterpret_cast<const CudaT*>(prepare.lhs_tensor->template Data<T>()),
+      reinterpret_cast<const HipT*>(prepare.lhs_tensor->template Data<T>()),
       &prepare.rhs_padded_strides,
-      reinterpret_cast<const CudaT*>(prepare.rhs_tensor->template Data<T>()),
+      reinterpret_cast<const HipT*>(prepare.rhs_tensor->template Data<T>()),
       &prepare.fdm_output_strides,
       prepare.fdm_H,
       prepare.fdm_C,
-      reinterpret_cast<CudaT*>(output_buffer.get()),
+      reinterpret_cast<HipT*>(output_buffer.get()),
       prepare.output_tensor->Shape().Size());
 
-  Impl_Cast<CudaT, ToHipType<bool>::MappedType>(
-      reinterpret_cast<CudaT*>(output_buffer.get()),
+  Impl_Cast<HipT, ToHipType<bool>::MappedType>(
+      reinterpret_cast<HipT*>(output_buffer.get()),
       reinterpret_cast<ToHipType<bool>::MappedType*>(prepare.output_tensor->template MutableData<bool>()),
       output_size);
 

@@ -204,7 +204,7 @@ class PRelu final : public BinaryElementwise<ShouldBroadcast> {
   Status ComputeInternal(OpKernelContext* context) const override;
 };
 
-template <typename T, typename CudaT>
+template <typename T, typename HipT>
 class VariadicInputBase : public HipKernel {
  public:
   VariadicInputBase(const OpKernelInfo& info) : HipKernel(info) {}
@@ -215,13 +215,13 @@ class VariadicInputBase : public HipKernel {
 
   typedef void (*ImplCompute)(int32_t output_rank_or_simple_broadcast,
                               const TArray<int64_t>* lhs_padded_strides,
-                              const CudaT* lhs_data,
+                              const HipT* lhs_data,
                               const TArray<int64_t>* rhs_padded_strides,
-                              const CudaT* rhs_data,
+                              const HipT* rhs_data,
                               const TArray<fast_divmod>* fdm_output_strides,
                               const fast_divmod& fdm_H,
                               const fast_divmod& fdm_C,
-                              CudaT* output_data,
+                              HipT* output_data,
                               size_t count);
 
   Status ComputeMethod(OpKernelContext* context, ImplCompute Impl_Compute) const;
@@ -252,20 +252,20 @@ class Min final : public VariadicInputBase<T, typename ToHipType<T>::MappedType>
   Status ComputeInternal(OpKernelContext* context) const override;
 };
 
-template <typename T, typename CudaT>
+template <typename T, typename HipT>
 class CompareFunction : public BinaryElementwise<ShouldBroadcast> {
  public:
   CompareFunction(const OpKernelInfo& info) : BinaryElementwise(info) {}
 
   typedef void (*ImplCompare)(int32_t output_rank_or_simple_broadcast,
                               const TArray<int64_t>* lhs_padded_strides,
-                              const CudaT* lhs_data,
+                              const HipT* lhs_data,
                               const TArray<int64_t>* rhs_padded_strides,
-                              const CudaT* rhs_data,
+                              const HipT* rhs_data,
                               const TArray<fast_divmod>* fdm_output_strides,
                               const fast_divmod& fdm_H,
                               const fast_divmod& fdm_C,
-                              CudaT* output_data,
+                              HipT* output_data,
                               size_t count);
 
   Status CompareMethod(OpKernelContext* context, ImplCompare Impl_Compare) const;

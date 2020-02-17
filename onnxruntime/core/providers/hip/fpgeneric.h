@@ -50,38 +50,38 @@ inline hipblasStatus_t hipblasGemmBatchedHelper(hipblasHandle_t handle, hipblasO
 //   return hipblasHgemmBatched(handle, transa, transb, m, n, k, alpha, (const __half**)Aarray, lda, (const __half**)Barray, ldb, beta, (__half**)Carray, ldc, batchCount);
 // }
 
-// // strided batched gemm
-// inline hipblasStatus_t hipblasGemmStridedBatchedHelper(hipblasHandle_t handle,
-//                                                      hipblasOperation_t transa,
-//                                                      hipblasOperation_t transb,
-//                                                      int m, int n, int k,
-//                                                      const float* alpha,
-//                                                      const float* A, int lda,
-//                                                      long long int strideA,
-//                                                      const float* B, int ldb,
-//                                                      long long int strideB,
-//                                                      const float* beta,
-//                                                      float* C, int ldc,
-//                                                      long long int strideC,
-//                                                      int batchCount) {
-//   return hipblasSgemmStridedBatched(handle, transa, transb, m, n, k, alpha, A, lda, strideA, B, ldb, strideB, beta, C, ldc, strideC, batchCount);
-// }
+// strided batched gemm
+inline hipblasStatus_t hipblasGemmStridedBatchedHelper(hipblasHandle_t handle,
+                                                     hipblasOperation_t transa,
+                                                     hipblasOperation_t transb,
+                                                     int m, int n, int k,
+                                                     const float* alpha,
+                                                     const float* A, int lda,
+                                                     long long int strideA,
+                                                     const float* B, int ldb,
+                                                     long long int strideB,
+                                                     const float* beta,
+                                                     float* C, int ldc,
+                                                     long long int strideC,
+                                                     int batchCount) {
+  return hipblasSgemmStridedBatched(handle, transa, transb, m, n, k, alpha, A, lda, strideA, B, ldb, strideB, beta, C, ldc, strideC, batchCount);
+}
 
-// inline hipblasStatus_t hipblasGemmStridedBatchedHelper(hipblasHandle_t handle,
-//                                                      hipblasOperation_t transa,
-//                                                      hipblasOperation_t transb,
-//                                                      int m, int n, int k,
-//                                                      const double* alpha,
-//                                                      const double* A, int lda,
-//                                                      long long int strideA,
-//                                                      const double* B, int ldb,
-//                                                      long long int strideB,
-//                                                      const double* beta,
-//                                                      double* C, int ldc,
-//                                                      long long int strideC,
-//                                                      int batchCount){
-//   return hipblasDgemmStridedBatched(handle, transa, transb, m, n, k, alpha, A, lda, strideA, B, ldb, strideB, beta, C, ldc, strideC, batchCount);
-// }
+inline hipblasStatus_t hipblasGemmStridedBatchedHelper(hipblasHandle_t handle,
+                                                     hipblasOperation_t transa,
+                                                     hipblasOperation_t transb,
+                                                     int m, int n, int k,
+                                                     const double* alpha,
+                                                     const double* A, int lda,
+                                                     long long int strideA,
+                                                     const double* B, int ldb,
+                                                     long long int strideB,
+                                                     const double* beta,
+                                                     double* C, int ldc,
+                                                     long long int strideC,
+                                                     int batchCount){
+  return hipblasDgemmStridedBatched(handle, transa, transb, m, n, k, alpha, A, lda, strideA, B, ldb, strideB, beta, C, ldc, strideC, batchCount);
+}
 
 // inline hipblasStatus_t hipblasGemmStridedBatchedHelper(hipblasHandle_t handle,
 //                                                      hipblasOperation_t transa,

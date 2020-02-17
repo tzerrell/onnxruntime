@@ -783,6 +783,7 @@ void OpTester::Run(
               reg->TryFindKernel(node, execution_provider->Type());
           if (!kci) {
             valid = false;
+            std::cerr << "No kernel registered from EP: " << provider_type << "for node: " << node.OpType() << std::endl;
             for (auto& custom_session_registry : custom_session_registries_) {
               if (custom_session_registry->GetKernelRegistry()->TryFindKernel(
                       node, execution_provider->Type())) {
@@ -801,15 +802,10 @@ void OpTester::Run(
 
         has_run = true;
 
-        EXPECT_TRUE(
-            session_object
-                .RegisterExecutionProvider(std::move(execution_provider))
-                .IsOK());
-
-        fetches_ = ExecuteModel<InferenceSession>(
-            *p_model, session_object, expect_result, expected_failure_string,
-            run_options, feeds, output_names, provider_type,
-            custom_output_verifier);
+        EXPECT_TRUE(session_object.RegisterExecutionProvider(std::move(execution_provider)).IsOK());
+        std::cerr << "Running on EP: " << provider_type << std::endl;
+        fetches_ = ExecuteModel<InferenceSession>(*p_model, session_object, expect_result, expected_failure_string, run_options,
+                                                  feeds, output_names, provider_type, custom_output_verifier);
 
         cur_provider = "not set";
       }

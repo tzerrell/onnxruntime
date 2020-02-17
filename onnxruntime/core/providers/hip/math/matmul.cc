@@ -122,56 +122,55 @@ Status MatMul<T>::ComputeInternal(OpKernelContext* ctx) const {
     return Status::OK();
   } else if (CanUseStridedBatchedGemm(left_X->Shape(), right_X->Shape(),
              transa, transb, stride_A, stride_B, stride_C, batch_count)) {
-    // HIPBLAS_RETURN_IF_ERROR(hipblasGemmStridedBatchedHelper(Base::HipblasHandle(),
-    //                                                       transB,
-    //                                                       transA,
-    //                                                       static_cast<int>(helper.N()),
-    //                                                       static_cast<int>(helper.M()),
-    //                                                       static_cast<int>(helper.K()),
-    //                                                       &one,
-    //                                                       reinterpret_cast<const HipT*>(right_X->template Data<T>()),
-    //                                                       ldb,
-    //                                                       stride_B,
-    //                                                       reinterpret_cast<const HipT*>(left_X->template Data<T>()),
-    //                                                       lda,
-    //                                                       stride_A,
-    //                                                       &zero,
-    //                                                       reinterpret_cast<HipT*>(Y->template MutableData<T>()),
-    //                                                       ldc,
-    //                                                       stride_C,
-    //                                                       static_cast<int>(batch_count)));
-    // return Status::OK();
-    return ORT_MAKE_STATUS(ONNXRUNTIME, FAIL, "GemmStrideBatch is not supported");
+    HIPBLAS_RETURN_IF_ERROR(hipblasGemmStridedBatchedHelper(Base::HipblasHandle(),
+                                                          transB,
+                                                          transA,
+                                                          static_cast<int>(helper.N()),
+                                                          static_cast<int>(helper.M()),
+                                                          static_cast<int>(helper.K()),
+                                                          &one,
+                                                          reinterpret_cast<const HipT*>(right_X->template Data<T>()),
+                                                          ldb,
+                                                          stride_B,
+                                                          reinterpret_cast<const HipT*>(left_X->template Data<T>()),
+                                                          lda,
+                                                          stride_A,
+                                                          &zero,
+                                                          reinterpret_cast<HipT*>(Y->template MutableData<T>()),
+                                                          ldc,
+                                                          stride_C,
+                                                          static_cast<int>(batch_count)));
+    return Status::OK();
   }
 
-  // HipAsyncBuffer<const HipT*> left_arrays(this, helper.LeftOffsets().size());
-  // HipAsyncBuffer<const HipT*> right_arrays(this, helper.RightOffsets().size());
-  // HipAsyncBuffer<HipT*> output_arrays(this, helper.OutputOffsets().size());
-  // MatMulComputeHelper::OffsetToArrays(reinterpret_cast<const HipT*>(left_X->template Data<T>()), helper.LeftOffsets(), left_arrays.CpuSpan());
-  // MatMulComputeHelper::OffsetToArrays(reinterpret_cast<const HipT*>(right_X->template Data<T>()), helper.RightOffsets(), right_arrays.CpuSpan());
-  // MatMulComputeHelper::OffsetToArrays(reinterpret_cast<HipT*>(Y->template MutableData<T>()), helper.OutputOffsets(), output_arrays.CpuSpan());
-  // ORT_RETURN_IF_ERROR(left_arrays.CopyToGpu());
-  // ORT_RETURN_IF_ERROR(right_arrays.CopyToGpu());
-  // ORT_RETURN_IF_ERROR(output_arrays.CopyToGpu());
+  HipAsyncBuffer<const HipT*> left_arrays(this, helper.LeftOffsets().size());
+  HipAsyncBuffer<const HipT*> right_arrays(this, helper.RightOffsets().size());
+  HipAsyncBuffer<HipT*> output_arrays(this, helper.OutputOffsets().size());
+  MatMulComputeHelper::OffsetToArrays(reinterpret_cast<const HipT*>(left_X->template Data<T>()), helper.LeftOffsets(), left_arrays.CpuSpan());
+  MatMulComputeHelper::OffsetToArrays(reinterpret_cast<const HipT*>(right_X->template Data<T>()), helper.RightOffsets(), right_arrays.CpuSpan());
+  MatMulComputeHelper::OffsetToArrays(reinterpret_cast<HipT*>(Y->template MutableData<T>()), helper.OutputOffsets(), output_arrays.CpuSpan());
+  ORT_RETURN_IF_ERROR(left_arrays.CopyToGpu());
+  ORT_RETURN_IF_ERROR(right_arrays.CopyToGpu());
+  ORT_RETURN_IF_ERROR(output_arrays.CopyToGpu());
 
-  // // note that onnxruntime OrtValue is row major, while cublas is column major,
-  // // so swap left/right operands
-  // HIPBLAS_RETURN_IF_ERROR(cublasGemmBatchedHelper(
-  //     Base::HipblasHandle(),
-  //     transB,
-  //     transA,
-  //     static_cast<int>(helper.N()),
-  //     static_cast<int>(helper.M()),
-  //     static_cast<int>(helper.K()),
-  //     &one,
-  //     right_arrays.GpuPtr(),
-  //     ldb,
-  //     left_arrays.GpuPtr(),
-  //     lda,
-  //     &zero,
-  //     output_arrays.GpuPtr(),
-  //     ldc,
-  //     static_cast<int>(helper.OutputOffsets().size())));
+  // note that onnxruntime OrtValue is row major, while cublas is column major,
+  // so swap left/right operands
+  HIPBLAS_RETURN_IF_ERROR(hipblasGemmBatchedHelper(
+      Base::HipblasHandle(),
+      transB,
+      transA,
+      static_cast<int>(helper.N()),
+      static_cast<int>(helper.M()),
+      static_cast<int>(helper.K()),
+      &one,
+      right_arrays.GpuPtr(),
+      ldb,
+      left_arrays.GpuPtr(),
+      lda,
+      &zero,
+      output_arrays.GpuPtr(),
+      ldc,
+      static_cast<int>(helper.OutputOffsets().size())));
 
   return Status::OK();
 }
