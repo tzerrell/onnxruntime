@@ -145,6 +145,14 @@ add_winml_test(
 target_include_directories(winml_test_concurrency PRIVATE ${ONNXRUNTIME_ROOT}/core/graph)
 target_precompiled_header(winml_test_concurrency testPch.h)
 target_compile_definitions(winml_test_concurrency PRIVATE BUILD_GOOGLE_TEST)
+target_link_libraries(winml_test_concurrency PRIVATE windowsapp.lib)
+target_link_options(winml_test_concurrency PRIVATE /NODEFAULTLIB:kernel32.lib /NODEFAULTLIB:user32.lib /NODEFAULTLIB:gdi32.lib /NODEFAULTLIB:winspool.lib /NODEFAULTLIB:shell32.lib /NODEFAULTLIB:ole32.lib /NODEFAULTLIB:oleaut32.lib /NODEFAULTLIB:uuid.lib /NODEFAULTLIB:comdlg32.lib /NODEFAULTLIB:advapi32.lib)
+if (onnxruntime_USE_DML)
+  target_link_options(winml_test_concurrency PRIVATE /DELAYLOAD:directml.dll)
+endif()
+if (EXISTS ${dxcore_header})
+  target_link_options(winml_test_concurrency PRIVATE /DELAYLOAD:ext-ms-win-dxcore-l1-*.dll)
+endif()
 
 # During build time, copy any modified collaterals.
 # configure_file(source destination COPYONLY), which configures CMake to copy the file whenever source is modified,
