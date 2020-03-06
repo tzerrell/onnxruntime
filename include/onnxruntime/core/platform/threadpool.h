@@ -179,11 +179,12 @@ class ThreadPool {
   // Similar to ParallelFor above, but takes the specified scheduling strategy
   // into account.
   void ParallelFor(int64_t total, const SchedulingParams& scheduling_params,
-                   const std::function<void(int64_t, int64_t)>& fn);
+                   const std::function<void(ptrdiff_t, ptrdiff_t)>& fn);
 
   // Same as ParallelFor with Fixed Block Size scheduling strategy.
   // Deprecated. Prefer ParallelFor with a SchedulingStrategy argument.
-  void TransformRangeConcurrently(int64_t block_size, int64_t total, const std::function<void(int64_t, int64_t)>& fn);
+  void TransformRangeConcurrently(int64_t block_size, int64_t total,
+                                  const std::function<void(ptrdiff_t, ptrdiff_t)>& fn);
 
   // Shards the "total" units of work. For more details, see "ParallelFor".
   //
@@ -201,12 +202,12 @@ class ThreadPool {
   // should be stored in an array initially filled with null, and a buffer
   // should be allocated by fn the first time that the id is used.
   void ParallelForWithWorkerId(int64_t total, int64_t cost_per_unit,
-                               const std::function<void(int64_t, int64_t, int)>& fn);
+                               const std::function<void(ptrdiff_t, ptrdiff_t, int)>& fn);
 
   // Similar to ParallelForWithWorkerId above, but takes the specified
   // scheduling strategy into account.
   void ParallelForWithWorkerId(int64_t total, const SchedulingParams& scheduling_params,
-                               const std::function<void(int64_t, int64_t, int)>& fn);
+                               const std::function<void(ptrdiff_t, ptrdiff_t, int)>& fn);
 
   // Returns the number of threads in the pool.
   int NumThreads() const;
@@ -283,7 +284,7 @@ Tries to call the given function in parallel, with calls split into (num_batches
   // Here, k = NumShardsUsedByFixedBlockSizeScheduling(total, block_size).
   // Requires 0 < block_size <= total.
   void ParallelForFixedBlockSizeScheduling(int64_t total, int64_t block_size,
-                                           const std::function<void(int64_t, int64_t)>& fn);
+                                           const std::function<void(ptrdiff_t, ptrdiff_t)>& fn);
   ThreadOptions thread_options_;
   // underlying_threadpool_ is the user_threadpool if user_threadpool is
   // provided in the constructor. Otherwise it is the eigen_threadpool_.

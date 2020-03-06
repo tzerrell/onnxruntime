@@ -63,7 +63,7 @@ TEST_P(SessionStateAddGetKernelTest, AddGetKernelTest) {
   auto kernel_def = KernelDefBuilder().SetName("Variable").Provider(kCpuExecutionProvider).SinceVersion(1, 10).Build();
   auto cpu_execution_provider = onnxruntime::make_unique<CPUExecutionProvider>(CPUExecutionProviderInfo(false));
 
-  OpKernelInfo p_info(node, *kernel_def, *cpu_execution_provider.get(), s.GetConstantInitializedTensors(),
+  OpKernelInfo p_info(node, *kernel_def, *cpu_execution_provider, s.GetConstantInitializedTensors(),
                       s.GetOrtValueNameIdxMap(), s.GetFuncMgr(), s.GetDataTransferMgr());
   unique_ptr<TestOpKernel> p_kernel;
   p_kernel.reset(new TestOpKernel(p_info));
@@ -86,7 +86,7 @@ TEST_P(SessionStateAddGetKernelTest, AddGetKernelTest) {
   EXPECT_EQ(orig_num_outputs, test_kernel->Node().OutputDefs().size());
 }
 
-INSTANTIATE_TEST_SUITE_P(SessionStateTests, SessionStateAddGetKernelTest, testing::ValuesIn({0, 1}));
+INSTANTIATE_TEST_SUITE_P(SessionStateTests, SessionStateAddGetKernelTest, testing::Values(0, 1));
 
 namespace {
 class TestParam {
@@ -148,7 +148,7 @@ TEST_P(SessionStateTestP, TestInitializerProcessing) {
   } else {
     const auto& name_to_idx = session_state.GetOrtValueNameIdxMap();
 
-    for (auto entry : initializers) {
+    for (const auto& entry : initializers) {
       int idx;
       ASSERT_STATUS_OK(name_to_idx.GetIdx(entry.first, idx));
 
