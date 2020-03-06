@@ -1021,7 +1021,7 @@ def main():
               tensorrt_run_onnx_tests(args, build_dir, configs, trt_onnx_test_data_dir, "tensorrt",1)
 
             if args.use_cuda and not args.use_tensorrt:
-              run_onnx_tests(build_dir, configs, onnx_test_data_dir, 'cuda', args.enable_multi_device_test, False, 2)           
+              run_onnx_tests(build_dir, configs, onnx_test_data_dir, 'cuda', args.enable_multi_device_test, False, 1)           
 
             if args.use_ngraph:
               run_onnx_tests(build_dir, configs, onnx_test_data_dir, 'ngraph', args.enable_multi_device_test, True, 1)
