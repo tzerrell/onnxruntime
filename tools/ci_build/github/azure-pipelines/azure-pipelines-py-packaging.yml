@@ -213,7 +213,7 @@ jobs:
   workspace:
     clean: all
   pool: 'Win-GPU-2019'
-  timeoutInMinutes:  60  
+  timeoutInMinutes:  120  
   variables:
     CUDA_VERSION: '10.1'
     EnvSetupScript: setup_env_cuda.bat
