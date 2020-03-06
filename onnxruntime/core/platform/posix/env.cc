@@ -116,8 +116,7 @@ class PosixThread : public EnvThread {
   ~PosixThread() override {
     void* res;
     int ret = pthread_join(hThread, &res);
-    if (ret != 0)
-      abort();
+    assert(ret == 0);
   }
 
   // This function is called when the threadpool is cancelled.
