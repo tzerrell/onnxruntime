@@ -64,5 +64,11 @@ struct SessionOptions {
   // For models with free input dimensions (most commonly batch size), specifies a set of values to override those
   // free dimensions with, keyed by dimension denotation.
   std::vector<FreeDimensionOverride> free_dimension_overrides;
+
+  bool thread_pool_allow_spinning = true;
+
+  // The default stack size for Windows EXEs is 1MB. And mlas requires 64KB to use. So usually it's fine.
+  // But if the default setting was changed to a lower value, then this option can be used to adjust it back.
+  unsigned int stack_size = 0;
 };
 }  // namespace onnxruntime

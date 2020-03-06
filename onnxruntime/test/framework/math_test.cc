@@ -29,7 +29,8 @@ class MathGemmTest : public testing::TestWithParam<int> {
   static concurrency::ThreadPool* CreateThreadPool(int size) {
     if (size == 1)
       return nullptr;
-    return new concurrency::ThreadPool("test", size);
+    return new concurrency::ThreadPool(&onnxruntime::Env::Default(), ThreadOptions(), ORT_TSTR("MathGemmTest"), size,
+                                       true);
   }
   std::unique_ptr<concurrency::ThreadPool> tp{CreateThreadPool(GetParam())};
 };
@@ -121,8 +122,7 @@ TEST_P(MathGemmTest, GemmNoTransTrans) {
   }
 }
 
-INSTANTIATE_TEST_CASE_P(MathGemmTests, MathGemmTest,
-                        testing::Values(1, 4));
+INSTANTIATE_TEST_SUITE_P(MathGemmTests, MathGemmTest, testing::Values(1, 4));
 
 TEST(MathTest, GemvNoTrans) {
   auto& provider = CPUMathUtil::Instance();

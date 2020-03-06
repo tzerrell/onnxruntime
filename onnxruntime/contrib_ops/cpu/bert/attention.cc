@@ -236,7 +236,7 @@ Status Attention<T>::Compute(OpKernelContext* context) const {
     const int N = batch_size * num_heads_ * sequence_length;
     const int D = sequence_length;
 
-    concurrency::ThreadPool::TryBatchParallelFor(context->GetOperatorThreadPool(), N, [&](int j) {
+    concurrency::ThreadPool::TryBatchParallelFor(context->GetOperatorThreadPool(), N, [&](ptrdiff_t j) {
       float* x = reinterpret_cast<T*>(scratch_data) + j * D;
       float* y = x;
 
@@ -246,7 +246,8 @@ Status Attention<T>::Compute(OpKernelContext* context) const {
       // e^xi/(e^x1 + ...e^xn) = e^(xi - max) / (e^(x1 - max) + ... + e^(xn - max))
       float max = -std::numeric_limits<float>::infinity();
       for (int i = 0; i < D; i++) {
-        if (max < x[i]) max = x[i];
+        if (max < x[i])
+          max = x[i];
       }
       for (int i = 0; i < D; i++) {
         y[i] = expf(x[i] - max);
