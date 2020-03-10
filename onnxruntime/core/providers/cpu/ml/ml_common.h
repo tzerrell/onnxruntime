@@ -422,8 +422,10 @@ void batched_update_scores_inplace(gsl::span<T> scores, int64_t num_batches_in, 
         *s = ComputeProbit(*s);
         ++s;
       }
-    } else {
-      // if we're adding a second class we need to work from the back forwards
+    } else if (add_second_class >= 0) {
+      // in this case we have a buffer that holds 2x scores. the actual scores are at the start of the buffer,
+      // and for each score we need 2 entries.
+      // process the scores from the back to the front so we don't need a separate buffer.
       std::function<void(const float score, float* output)> update_scores;
 
       switch (add_second_class) {

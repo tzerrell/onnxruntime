@@ -23,14 +23,6 @@ ONNX_CPU_OPERATOR_ML_KERNEL(
                               }),
     LinearClassifier);
 
-// Use GEMM for the calculations, with broadcasting of intercepts
-// https://github.com/onnx/onnx/blob/master/docs/Operators.md#Gemm
-//
-// X: [num_batches, num_features]
-// coefficients_: [num_targets, num_features]
-// intercepts_: optional [num_targets].
-// Output: X * coefficients_^T + intercepts_: [num_batches, num_targets]
-
 LinearClassifier::LinearClassifier(const OpKernelInfo& info)
     : OpKernel(info),
       multi_class_(info.GetAttrOrDefault<int64_t>("multi_class", 0)),
@@ -45,9 +37,12 @@ LinearClassifier::LinearClassifier(const OpKernelInfo& info)
   class_count_ = static_cast<int64_t>(intercepts_.size());
 }
 
+// Use GEMM for the calculations, with broadcasting of intercepts
+// https://github.com/onnx/onnx/blob/master/docs/Operators.md#Gemm
+//
 // X: [num_batches, num_features]
 // coefficients_: [num_targets, num_features]
-// intercepts_: [num_targets].
+// intercepts_: [num_targets]
 // scores: X * coefficients_^T + intercepts_: [num_batches, num_targets]
 void LinearClassifier::ComputeImpl(const gsl::span<const float> input,
                                    int64_t num_batches, int64_t num_features, int64_t num_targets,
@@ -171,7 +166,7 @@ Status LinearClassifier::Compute(OpKernelContext* ctx) const {
   if (element_type == ONNX_NAMESPACE::TensorProto_DataType_FLOAT) {
     input = X.DataAsSpan<float>();
   } else {
-    // at some point we need to convert to float as output Z is tensor(float).
+    // at some point we need to convert to float as output Z has type 'tensor(float)'.
     // we have a fast GEMM implementation for float, so convert the input to float so we can use that.
     auto status = ctx->GetTempSpaceAllocator(&alloc);
     auto num_elements = input_shape.Size();

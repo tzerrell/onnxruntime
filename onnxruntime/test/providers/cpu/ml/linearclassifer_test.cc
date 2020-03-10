@@ -126,14 +126,15 @@ TEST(MLOpTest, LinearClassifierBinaryWithLabels) {
   test.Run();
 }
 
-TEST(MLOpTest, LinearClassifierMulticlassInt64Input) {
+template <typename T>
+void LinearClassifierMulticlass() {
   OpTester test("LinearClassifier", 1, onnxruntime::kMLDomain);
 
   std::vector<float> coefficients = {-0.22562418f, 0.34188559f, 0.68346153f,
                                      -0.68051993f, -0.1975279f, 0.03748541f};
   std::vector<int64_t> classes = {1, 2, 3};
   int64_t multi_class = 0;
-  std::vector<int64_t> X = {1, 0, 3, 44, 23, 11};
+  std::vector<T> X = {1, 0, 3, 44, 23, 11};
 
   //three estimates, for 3 points each, so 9 predictions
   std::vector<float> predictions = {-4.14164229f, 1.1092185f, -0.06021539f,
@@ -147,12 +148,23 @@ TEST(MLOpTest, LinearClassifierMulticlassInt64Input) {
   test.AddAttribute("classlabels_ints", classes);
   test.AddAttribute("multi_class", multi_class);
 
-  test.AddInput<int64_t>("X", {3, 2}, X);
+  test.AddInput<T>("X", {3, 2}, X);
   test.AddOutput<int64_t>("Y", {3}, predicted_class);
   test.AddOutput<float>("Z", {3, 3}, predictions);
 
   test.Run();
 }
 
+TEST(MLOpTest, LinearClassifierMulticlassInt64Input) {
+  LinearClassifierMulticlass<int64_t>();
+}
+
+TEST(MLOpTest, LinearClassifierMulticlassInt32Input) {
+  LinearClassifierMulticlass<int32_t>();
+}
+
+TEST(MLOpTest, LinearClassifierMulticlassDoubleInput) {
+  LinearClassifierMulticlass<double>();
+}
 }  // namespace test
 }  // namespace onnxruntime
