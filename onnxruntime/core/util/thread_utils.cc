@@ -11,7 +11,7 @@ namespace onnxruntime {
 namespace concurrency {
 static inline std::vector<size_t> GenerateVectorOfN(size_t n) {
   std::vector<size_t> ret(n);
-  for (int i = 0; i != n; ++i) {
+  for (size_t i = 0; i != n; ++i) {
     ret[i] = i;
   }
   return ret;

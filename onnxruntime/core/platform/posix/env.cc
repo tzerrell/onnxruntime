@@ -111,10 +111,10 @@ class PosixThread : public EnvThread {
                        new Param{name_prefix, index, start_address, param, thread_options});
     if (s != 0)
       ORT_THROW("pthread_create failed");
-    if (thread_options.SetThreadAffinityToProcessor) {
+    if (!thread_options.affinity.empty()) {
       cpu_set_t cpuset;
       CPU_ZERO(&cpuset);
-      CPU_SET(index, &cpuset);
+      CPU_SET(thread_options.affinity[index], &cpuset);
       s = pthread_setaffinity_np(hThread, sizeof(cpu_set_t), &cpuset);
       if (s != 0)
         ORT_THROW("pthread_setaffinity_np failed");
@@ -138,14 +138,13 @@ class PosixThread : public EnvThread {
 
  private:
   static void* ThreadMain(void* param) {
-    Param* p = (Param*)param;
+    std::unique_ptr<Param> p((Param*)param);
     try {
       // Ignore the returned value for now
       p->start_address(p->index, p->param);
     } catch (std::exception&) {
       p->param->Cancel();
     }
-    delete p;
     return nullptr;
   }
   pthread_t hThread;
