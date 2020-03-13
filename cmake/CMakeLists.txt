@@ -72,6 +72,9 @@ option(onnxruntime_USE_PREINSTALLED_EIGEN "Use pre-installed EIGEN. Need to prov
 option(onnxruntime_BUILD_BENCHMARKS "Build ONNXRuntime micro-benchmarks" OFF)
 option(onnxruntime_USE_TVM "Build tvm for code-gen" OFF)
 option(onnxruntime_BUILD_FOR_NATIVE_MACHINE "Enable this option for turning on optimization specific to this machine" OFF)
+option(onnxruntime_USE_AVX "Use AVX instructions" OFF)
+option(onnxruntime_USE_AVX2 "Use AVX2 instructions" OFF)
+option(onnxruntime_USE_AVX512 "Use AVX512 instructions" OFF)
 option(onnxruntime_USE_LLVM "Build tvm with LLVM" OFF)
 option(onnxruntime_USE_OPENMP "Build with OpenMP support" OFF)
 option(onnxruntime_BUILD_SHARED_LIB "Build a shared library" OFF)
@@ -163,6 +166,9 @@ file (STRINGS "${REPO_ROOT}/VERSION_NUMBER" ORT_VERSION)
 # Guarantee that the Eigen code that you are #including is licensed
 # under the MPL2 and possibly more permissive licenses (like BSD).
 add_definitions(-DEIGEN_MPL2_ONLY)
+if(MSVC)
+  add_definitions(-DEIGEN_HAS_CONSTEXPR -DEIGEN_HAS_VARIADIC_TEMPLATES -DEIGEN_HAS_CXX11_MATH -DEIGEN_HAS_CXX11_ATOMIC)
+endif()
 
 if(onnxruntime_CROSS_COMPILING)
   set(CMAKE_CROSSCOMPILING ON)
@@ -206,7 +212,16 @@ if (MSVC)
     set(gtest_force_shared_crt ON CACHE BOOL "Use shared (DLL) run-time lib for gtest" FORCE)
   endif()
   #Always enable exception handling, even for Windows ARM
-  SET (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /EHsc")  
+  SET (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /EHsc")
+  if  (onnxruntime_USE_AVX)
+    SET (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /arch:AVX")
+  elseif  (onnxruntime_USE_AVX2)
+    SET (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /arch:AVX2")
+  elseif  (onnxruntime_USE_AVX512)
+    SET (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /arch:AVX512")
+  endif()
+  SET (CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /Ob2 /Oi /d2ReducedOptimizeHugeFunctions")
+  SET (CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} /Ob2 /Oi /d2ReducedOptimizeHugeFunctions")
   if (onnxruntime_ENABLE_LTO AND NOT onnxruntime_USE_CUDA)
     SET (CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /Gw /GL")
     SET (CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} /Gw /GL")
@@ -226,6 +241,15 @@ else()
     string(APPEND CMAKE_C_FLAGS_RELEASE " -march=native -mtune=native")
     string(APPEND CMAKE_CXX_FLAGS_RELWITHDEBINFO " -march=native -mtune=native")
     string(APPEND CMAKE_C_FLAGS_RELWITHDEBINFO " -march=native -mtune=native")
+  elseif  (onnxruntime_USE_AVX)
+    SET (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -mavx")
+  elseif  (onnxruntime_USE_AVX2)
+    SET (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -mavx2")
+  elseif  (onnxruntime_USE_AVX512)
+    SET (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -mavx512f  -mavx512pf  -mavx512er  -mavx512cd  -mavx512vl"
+            " -mavx512bw  -mavx512dq  -mavx512ifma  -mavx512vbmi -mavx512vbmi2 -mavx512vpopcntdq -mavx5124fmaps"
+            " -mavx512vnni -mavx5124vnniw")
+
   endif()  
 endif()
 
@@ -579,6 +603,7 @@ else()
   check_cxx_compiler_flag(-Wmissing-braces HAS_MISSING_BRACES)
   check_cxx_compiler_flag(-Wignored-attributes HAS_IGNORED_ATTRIBUTES)
   check_cxx_compiler_flag(-Wdeprecated-copy HAS_DEPRECATED_COPY)
+  check_cxx_compiler_flag(-Wdeprecated-declarations HAS_DEPRECATED_DECLARATIONS)
   check_cxx_compiler_flag(-Wclass-memaccess HAS_CLASS_MEMACCESS)
   check_cxx_compiler_flag(-Wmaybe-uninitialized HAS_MAYBE_UNINITIALIZED)
 
@@ -828,6 +853,7 @@ set(VERSION_MINOR_PART   0 CACHE STRING "Second part of numeric file/product ver
 set(VERSION_BUILD_PART       0 CACHE STRING "Third part of numeric file/product version.")
 set(VERSION_PRIVATE_PART     0 CACHE STRING "Fourth part of numeric file/product version.")
 set(VERSION_STRING       "Internal Build" CACHE STRING "String representation of file/product version.")
+include(wil.cmake)
 
 if (onnxruntime_USE_WINML)
   # WINML uses and depends on the shared lib.  Note:  You can build WINML without DML and you will get a 
@@ -837,7 +863,6 @@ if (onnxruntime_USE_WINML)
         FATAL_ERROR 
         "Option onnxruntime_USE_WINML can only be used when onnxruntime_BUILD_SHARED_LIB is also enabled")
   endif()
-  include(wil.cmake)
   include(winml.cmake)
 endif() # if(onnxruntime_USE_WINML)
 
