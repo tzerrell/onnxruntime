@@ -213,6 +213,7 @@ static common::Status CalculateStaticCopyInfoForFeed(const SessionState& session
     return Status::OK();
   }
 
+  // printf("Setting target device of [%s] to %s\n", input_name.c_str(), node_info.device->ToString().c_str());
   copy_info.target_device = *node_info.device;
 
   const auto& required_provider_type = GetNodeInputProviderType(node_info);
@@ -590,7 +591,7 @@ void DumpNodeInputs(const OpKernelContext& context, const Node& node) {
           const auto& tensor = *context.Input<Tensor>(i);
           const auto& shape = tensor.Shape();
 
-          std::cout << " Shape: " << shape << "\n";
+          std::cout << " Shape: " << shape << " Location: " << tensor.Location().name << " Data: " << tensor.DataRaw() << "\n";
         } else {
           std::cout << " is non-tensor type.\n";
         }
@@ -618,7 +619,7 @@ void DumpNodeOutputs(OpKernelContext& context, const Node& node, const SessionSt
           const auto& tensor = *context.Output<Tensor>(i);
           const auto& shape = tensor.Shape();
 
-          std::cout << " Shape: " << shape << "\n";
+          std::cout << " Shape: " << shape << " Location: " << tensor.Location().name << " Data: " << tensor.DataRaw() << "\n";
 
           if (DEBUG_NODE_INPUTS_OUTPUTS > 1) {
             // check tensor is on CPU before dumping it

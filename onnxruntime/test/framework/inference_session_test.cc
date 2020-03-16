@@ -129,8 +129,8 @@ class InferenceSessionGetGraphWrapper : public InferenceSession {
 };
 
 namespace test {
-static void VerifyOutputs(const std::vector<OrtValue>& fetches, const std::vector<int64_t>& expected_dims,
-                          const std::vector<float>& expected_values);
+//static void VerifyOutputs(const std::vector<OrtValue>& fetches, const std::vector<int64_t>& expected_dims,
+//                          const std::vector<float>& expected_values);
 static constexpr const ORTCHAR_T* MODEL_URI = ORT_TSTR("testdata/mul_1.onnx");
 static constexpr const ORTCHAR_T* MODEL_URI_NO_OPSET = ORT_TSTR("testdata/mul_1.noopset.onnx");
 //static const std::string MODEL_URI = "./testdata/squeezenet/model.onnx"; // TODO enable this after we've weights?
@@ -172,7 +172,25 @@ static void CreateMatMulModel(std::unique_ptr<onnxruntime::Model>& p_model, Prov
   ASSERT_TRUE(status.IsOK()) << status.ErrorMessage();
 }
 
-template <typename T = float>
+template <typename T>
+void VerifyOutputs(const Tensor& tensor, const std::vector<int64_t>& expected_dims, const std::vector<T>& expected_values);
+
+template <>
+void VerifyOutputs(const Tensor& tensor, const std::vector<int64_t>& expected_dims,
+                   const std::vector<float>& expected_values) {
+  TensorShape expected_shape(expected_dims);
+  //Use reinterpret_cast to bypass a gcc bug: https://gcc.gnu.org/bugzilla/show_bug.cgi?id=51213
+  ASSERT_EQ(*reinterpret_cast<const std::vector<int64_t>*>(&expected_shape), *reinterpret_cast<const std::vector<int64_t>*>(&tensor.Shape()));
+  const std::vector<float> found(tensor.template Data<float>(),
+                             tensor.template Data<float>() + expected_values.size());
+
+  ASSERT_EQ(expected_values.size(), (size_t)tensor.Shape().Size());
+  for (int i = 0; i < expected_values.size(); i++) {
+    ASSERT_EQ(floor(expected_values[i] * 1000.0), floor(found[i] * 1000.0));
+  }
+}
+
+template <typename T>
 void VerifyOutputs(const Tensor& tensor, const std::vector<int64_t>& expected_dims,
                    const std::vector<T>& expected_values) {
   TensorShape expected_shape(expected_dims);
@@ -183,11 +201,23 @@ void VerifyOutputs(const Tensor& tensor, const std::vector<int64_t>& expected_di
   ASSERT_EQ(expected_values, found);
 }
 
+template <typename T = float>
 void VerifyOutputs(const std::vector<OrtValue>& fetches, const std::vector<int64_t>& expected_dims,
-                   const std::vector<float>& expected_values) {
+                   const std::vector<T>& expected_values) {
   ASSERT_EQ(1u, fetches.size());
   auto& rtensor = fetches.front().Get<Tensor>();
   VerifyOutputs(rtensor, expected_dims, expected_values);
+}
+
+template <typename T1 = float, typename T2 = float>
+void VerifyOutputs(const std::vector<OrtValue>& fetches, const std::vector<int64_t>& expected_dims1,
+                   const std::vector<T1>& expected_values1, const std::vector<int64_t>& expected_dims2,
+                   const std::vector<T2>& expected_values2) {
+  ASSERT_EQ(2u, fetches.size());
+  auto& rtensor1 = fetches[0].Get<Tensor>();
+  auto& rtensor2 = fetches[1].Get<Tensor>();
+  VerifyOutputs(rtensor1, expected_dims1, expected_values1);
+  VerifyOutputs(rtensor2, expected_dims2, expected_values2);
 }
 
 void RunModel(InferenceSession& session_object,
@@ -1112,6 +1142,605 @@ TEST(ExecutionProviderTest, FunctionTest) {
   status = session_object_2.Initialize();
   ASSERT_TRUE(status.IsOK());
   status = session_object_2.Run(run_options, feeds, output_names, &fetches);
+  ASSERT_TRUE(status.IsOK());
+  VerifyOutputs(fetches, expected_dims_mul_m, expected_values_mul_m);
+}
+
+//TEST(TEST300, T300) {
+//  ONNX_NAMESPACE::GraphProto if_then;
+//  // graph_if_then
+//  {
+//    onnxruntime::Model model("graph_if_then", false, DefaultLoggingManager().DefaultLogger());
+//    auto& graph = model.MainGraph();
+//    {
+//      ONNX_NAMESPACE::TypeProto float_tensor;
+//      float_tensor.mutable_tensor_type()->set_elem_type(ONNX_NAMESPACE::TensorProto_DataType_FLOAT);
+//      float_tensor.mutable_tensor_type()->mutable_shape()->add_dim()->set_dim_param("__graph_if_then__unknown");
+//      // ONNX_NAMESPACE::TypeProto bool_tensor;
+//      // bool_tensor.mutable_tensor_type()->set_elem_type(ONNX_NAMESPACE::TensorProto_DataType_BOOL);
+//
+//      auto& data_0 = graph.GetOrCreateNodeArg("data_0", &float_tensor);
+//      auto& graph_if_output = graph.GetOrCreateNodeArg("graph_if_output_then", &float_tensor);
+//      graph.AddOuterScopeNodeArg("data_0");
+//
+//      {
+//        std::vector<onnxruntime::NodeArg*> inputs = {&data_0};
+//        std::vector<onnxruntime::NodeArg*> outputs = {&graph_if_output};
+//        graph.AddNode("abs_123", "Abs", "node abs", inputs, outputs);
+//      }
+//      auto status = graph.Resolve();
+//      ASSERT_TRUE(status.IsOK());
+//      if_then = graph.ToGraphProto();
+//      std::string model_file_name = "asdfasdf_if_then.onnx";
+//      status = onnxruntime::Model::Save(model, model_file_name);
+//      ASSERT_TRUE(status.IsOK());
+//    }
+//  }
+//
+//  // If inside If
+//  ONNX_NAMESPACE::GraphProto iii_then;
+//  //ONNX_NAMESPACE::GraphProto iii_else;
+//  {
+//    ONNX_NAMESPACE::TypeProto float_tensor;
+//    float_tensor.mutable_tensor_type()->set_elem_type(ONNX_NAMESPACE::TensorProto_DataType_FLOAT);
+//    float_tensor.mutable_tensor_type()->mutable_shape()->add_dim()->set_dim_param("__iii_then__unknown");
+//
+//    onnxruntime::Model model("graph_if_else___then", false, DefaultLoggingManager().DefaultLogger());
+//    auto& graph = model.MainGraph();
+//    auto& data_0 = graph.GetOrCreateNodeArg("data_0", &float_tensor);
+//    auto& graph_if_output_else = graph.GetOrCreateNodeArg("graph_if_output_else", &float_tensor);
+//    auto& output = graph.GetOrCreateNodeArg("graph_if_else___then_output", &float_tensor);
+//    graph.AddOuterScopeNodeArg("data_0");
+//    graph.AddOuterScopeNodeArg("graph_if_output_else");
+//    {
+//      std::vector<onnxruntime::NodeArg*> inputs = {&graph_if_output_else, &data_0};
+//      std::vector<onnxruntime::NodeArg*> outputs = {&output};
+//      graph.AddNode("add_1", "Add", "node add", inputs, outputs);
+//    }
+//    auto status = graph.Resolve();
+//    ASSERT_TRUE(status.IsOK());
+//    iii_then = graph.ToGraphProto();
+//    std::string model_file_name = "asdfasdf_if_else__then.onnx";
+//    status = onnxruntime::Model::Save(model, model_file_name);
+//    ASSERT_TRUE(status.IsOK());
+//  }
+//  // {
+//  //     ONNX_NAMESPACE::TypeProto float_tensor;
+//  //     float_tensor.mutable_tensor_type()->set_elem_type(ONNX_NAMESPACE::TensorProto_DataType_FLOAT);
+//
+//  //     onnxruntime::Model model("graph_if_else___else", false, DefaultLoggingManager().DefaultLogger());
+//  //     auto& graph = model.MainGraph();
+//  //     auto& graph_if_output_else = graph.GetOrCreateNodeArg("graph_if_output_else", &float_tensor);
+//  //     auto& output = graph.GetOrCreateNodeArg("graph_if_else___else_output", nullptr);
+//  //     graph.AddOuterScopeNodeArg("graph_if_output_else");
+//  //     {
+//  //       std::vector<onnxruntime::NodeArg*> inputs = { &graph_if_output_else };
+//  //       std::vector<onnxruntime::NodeArg*> outputs = { &output };
+//  //       graph.AddNode("abs_1", "Abs", "node abs", inputs, outputs);
+//  //     }
+//  //     auto status = graph.Resolve();
+//  //     ASSERT_TRUE(status.IsOK());
+//  //     iii_else = graph.ToGraphProto();
+//  //     std::string model_file_name = "asdfasdf_if_else__else.onnx";
+//  //     status = onnxruntime::Model::Save(model, model_file_name);
+//  //     ASSERT_TRUE(status.IsOK());
+//  // }
+//
+//  ONNX_NAMESPACE::GraphProto if_else;
+//  {
+//    onnxruntime::Model model("graph_if_else", false, DefaultLoggingManager().DefaultLogger());
+//    auto& graph = model.MainGraph();
+//    {
+//      ONNX_NAMESPACE::TypeProto float_tensor;
+//      float_tensor.mutable_tensor_type()->set_elem_type(ONNX_NAMESPACE::TensorProto_DataType_FLOAT);
+//      float_tensor.mutable_tensor_type()->mutable_shape()->add_dim()->set_dim_param("__graph_if_else__unknown");
+//      ONNX_NAMESPACE::TypeProto bool_tensor;
+//      bool_tensor.mutable_tensor_type()->set_elem_type(ONNX_NAMESPACE::TensorProto_DataType_BOOL);
+//
+//      auto& graph_if_input = graph.GetOrCreateNodeArg("graph_if_input", &float_tensor);
+//      auto& if_cond_input = graph.GetOrCreateNodeArg("if_cond_input", &bool_tensor);
+//      auto& data_0 = graph.GetOrCreateNodeArg("data_0", nullptr);
+//      auto& node_1 = graph.GetOrCreateNodeArg("graph_if_else_node_1", nullptr);
+//      auto& node_2 = graph.GetOrCreateNodeArg("graph_if_else_node_2", nullptr);
+//      //auto& node_3 = graph.GetOrCreateNodeArg("graph_if_else_node_3", nullptr);
+//      auto& node_4 = graph.GetOrCreateNodeArg("graph_if_else_node_4", &float_tensor);
+//      auto& graph_if_output = graph.GetOrCreateNodeArg("graph_if_output_else", &float_tensor);
+//      graph.AddOuterScopeNodeArg("graph_if_input");
+//      graph.AddOuterScopeNodeArg("if_cond_input");
+//      graph.AddOuterScopeNodeArg("data_0");
+//      //graph.AddOuterScopeNodeArg("graph_if_else_node_4");
+//
+//      {
+//        std::vector<onnxruntime::NodeArg*> inputs = {&graph_if_input};
+//        std::vector<onnxruntime::NodeArg*> outputs = {&node_1};
+//        graph.AddNode("shape_1", "Shape", "node 1", inputs, outputs);
+//      }
+//      {
+//        std::vector<onnxruntime::NodeArg*> inputs = {&node_1};
+//        std::vector<onnxruntime::NodeArg*> outputs = {&node_2};
+//        auto& cast_node = graph.AddNode("cast_1", "Cast", "node 2", inputs, outputs);
+//        ONNX_NAMESPACE::AttributeProto to;
+//        to.set_name("to");
+//        to.set_type(ONNX_NAMESPACE::AttributeProto_AttributeType::AttributeProto_AttributeType_INT);
+//        to.set_i(static_cast<int64_t>(ONNX_NAMESPACE::TensorProto_DataType_FLOAT));
+//        cast_node.AddAttribute("to", to);
+//      }
+//      {
+//        std::vector<onnxruntime::NodeArg*> inputs = {&node_2, &data_0};
+//        std::vector<onnxruntime::NodeArg*> outputs = {&graph_if_output};
+//        graph.AddNode("sub_1", "Sub", "node 3", inputs, outputs);
+//      }
+//      // {
+//      //   std::vector<onnxruntime::NodeArg*> inputs = { &graph_if_input };
+//      //   std::vector<onnxruntime::NodeArg*> outputs = { &node_3 };
+//      //   auto& cast_node = graph.AddNode("cast_2", "Cast", "node 2", inputs, outputs);
+//      //   ONNX_NAMESPACE::AttributeProto to;
+//      //   to.set_name("to");
+//      //   to.set_type(ONNX_NAMESPACE::AttributeProto_AttributeType::AttributeProto_AttributeType_INT);
+//      //   to.set_i(static_cast<int64_t>(ONNX_NAMESPACE::TensorProto_DataType_FLOAT));
+//      //   cast_node.AddAttribute("to", to);
+//      // }
+//      // {
+//      //   std::vector<onnxruntime::NodeArg*> inputs = { &graph_if_input, &data_0 };
+//      //   std::vector<onnxruntime::NodeArg*> outputs = { &node_4 };
+//      //   graph.AddNode("sub_2", "Sub", "node 4", inputs, outputs);
+//      // }
+//      {
+//        std::vector<onnxruntime::NodeArg*> inputs = {&if_cond_input};
+//        std::vector<onnxruntime::NodeArg*> outputs = {&node_4};
+//
+//        auto& if_node = graph.AddNode("if_inside_if", "If", "If node", inputs, outputs);
+//
+//        if_node.AddAttribute("then_branch", iii_then);
+//        if_node.AddAttribute("else_branch", iii_then);
+//      }
+//
+//      {
+//        std::vector<const onnxruntime::NodeArg*> outputs = {&node_4};
+//        graph.SetOutputs(outputs);
+//      }
+//
+//      auto status = graph.Resolve();
+//      ASSERT_TRUE(status.IsOK());
+//      if_else = graph.ToGraphProto();
+//      std::string model_file_name = "asdfasdf_if_else.onnx";
+//      status = onnxruntime::Model::Save(model, model_file_name);
+//      ASSERT_TRUE(status.IsOK());
+//    }
+//  }
+//
+//  {
+//    onnxruntime::Model model("graph_1", false, DefaultLoggingManager().DefaultLogger());
+//    auto& graph = model.MainGraph();
+//
+//    ONNX_NAMESPACE::TypeProto float_tensor;
+//    float_tensor.mutable_tensor_type()->set_elem_type(ONNX_NAMESPACE::TensorProto_DataType_FLOAT);
+//    //float_tensor.mutable_tensor_type()->mutable_shape()->add_dim()->set_dim_param("__unknown");
+//    ONNX_NAMESPACE::TypeProto bool_tensor;
+//    bool_tensor.mutable_tensor_type()->set_elem_type(ONNX_NAMESPACE::TensorProto_DataType_BOOL);
+//    //bool_tensor.mutable_tensor_type()->mutable_shape()->add_dim()->set_dim_value(1);
+//
+//    auto& if_cond_input = graph.GetOrCreateNodeArg("if_cond_input", &bool_tensor);
+//    auto& graph_if_input = graph.GetOrCreateNodeArg("graph_if_input", nullptr);
+//    auto& if_cond_output = graph.GetOrCreateNodeArg("if_cond_output", &float_tensor);
+//
+//    {
+//      std::vector<onnxruntime::NodeArg*> inputs = {&if_cond_input};
+//      std::vector<onnxruntime::NodeArg*> outputs = {&graph_if_input};
+//      auto& cast_node = graph.AddNode("cast_9", "Cast", "node 2", inputs, outputs);
+//      ONNX_NAMESPACE::AttributeProto to;
+//      to.set_name("to");
+//      to.set_type(ONNX_NAMESPACE::AttributeProto_AttributeType::AttributeProto_AttributeType_INT);
+//      to.set_i(static_cast<int64_t>(ONNX_NAMESPACE::TensorProto_DataType_FLOAT));
+//      cast_node.AddAttribute("to", to);
+//    }
+//
+//    std::vector<onnxruntime::NodeArg*> inputs = {&if_cond_input};
+//    std::vector<onnxruntime::NodeArg*> outputs = {&if_cond_output};
+//
+//    auto& if_node = graph.AddNode("if", "If", "If node", inputs, outputs);
+//
+//    if_node.AddAttribute("then_branch", if_then);
+//    if_node.AddAttribute("else_branch", if_else);
+//
+//    // ONNX_NAMESPACE::TensorProto init{};
+//    // init.set_name("if_cond_input");
+//    // init.set_data_type(ONNX_NAMESPACE::TensorProto_DataType_BOOL);
+//    // init.add_bool8_data(0);
+//    // graph.AddInitializedTensor(init);
+//
+//    // ONNX_NAMESPACE::TensorProto graph_if_input{};
+//    // graph_if_input.add_dims(1);
+//    // graph_if_input.set_name("graph_if_input");
+//    // graph_if_input.set_data_type(ONNX_NAMESPACE::TensorProto_DataType_FLOAT);
+//    // graph_if_input.add_float_data(0);
+//    // graph.AddInitializedTensor(graph_if_input);
+//    ONNX_NAMESPACE::TensorProto data_0{};
+//    data_0.set_name("data_0");
+//    data_0.add_dims(1);
+//    data_0.set_data_type(ONNX_NAMESPACE::TensorProto_DataType_FLOAT);
+//    data_0.add_float_data(0);
+//    graph.AddInitializedTensor(data_0);
+//
+//    auto status = graph.Resolve();
+//    ASSERT_TRUE(status.IsOK());
+//    std::string model_file_name = "asdfasdf.onnx";
+//    status = onnxruntime::Model::Save(model, model_file_name);
+//    ASSERT_TRUE(status.IsOK());
+//  }
+//
+//  std::string model_file_name = "asdfasdf.onnx";
+//  SessionOptions so;
+//  so.session_logid = "TEST300.T300";
+//  InferenceSession session_object{so};
+//
+//  CUDAExecutionProviderInfo epi;
+//  epi.device_id = 0;
+//  EXPECT_TRUE(session_object.RegisterExecutionProvider(onnxruntime::make_unique<CUDAExecutionProvider>(epi)).IsOK());
+//
+//  auto status = session_object.Load(model_file_name);
+//  ASSERT_TRUE(status.IsOK());
+//  status = session_object.Initialize();
+//  ASSERT_TRUE(status.IsOK());
+//
+//  RunOptions run_options;
+//  run_options.run_tag = so.session_logid;
+//
+//  std::vector<int64_t> dim = {1};
+//  std::vector<bool> va = {false};
+//  OrtValue ml_value_x;
+//  CreateMLValue<bool>(TestCPUExecutionProvider()->GetAllocator(0, OrtMemTypeDefault), dim, va,
+//                      &ml_value_x);
+//  NameMLValMap feeds;
+//  feeds.insert(std::make_pair("if_cond_input", ml_value_x));
+//
+//  // prepare outputs
+//  std::vector<std::string> output_names;
+//  output_names.push_back("if_cond_output");
+//  std::vector<OrtValue> fetches;
+//
+//  // prepare expected inputs and outputs
+//  std::vector<int64_t> expected_dims_mul_m = {};
+//  std::vector<float> expected_values_mul_m = {8.0f};
+//
+//  // Now run
+//  status = session_object.Run(run_options, feeds, output_names, &fetches);
+//  ASSERT_TRUE(status.IsOK());
+//  VerifyOutputs(fetches, expected_dims_mul_m, expected_values_mul_m);
+//}
+
+TEST(InferenceSessionTests, TestNestedSubgraph) {
+  ONNX_NAMESPACE::GraphProto if_then;
+  // graph_if_then
+  {
+    onnxruntime::Model model("graph_if_then", false, DefaultLoggingManager().DefaultLogger());
+    auto& graph = model.MainGraph();
+    {
+      ONNX_NAMESPACE::TypeProto float_tensor;
+      float_tensor.mutable_tensor_type()->set_elem_type(ONNX_NAMESPACE::TensorProto_DataType_FLOAT);
+      float_tensor.mutable_tensor_type()->mutable_shape()->add_dim()->set_dim_param("__graph_if_then__unknown");
+      // ONNX_NAMESPACE::TypeProto bool_tensor;
+      // bool_tensor.mutable_tensor_type()->set_elem_type(ONNX_NAMESPACE::TensorProto_DataType_BOOL);
+
+      auto& data_0 = graph.GetOrCreateNodeArg("data_0", &float_tensor);
+      auto& graph_if_output = graph.GetOrCreateNodeArg("graph_if_output_then", &float_tensor);
+      graph.AddOuterScopeNodeArg("data_0");
+
+      {
+        std::vector<onnxruntime::NodeArg*> inputs = {&data_0};
+        std::vector<onnxruntime::NodeArg*> outputs = {&graph_if_output};
+        graph.AddNode("abs_123", "Abs", "node abs", inputs, outputs);
+      }
+      auto status = graph.Resolve();
+      ASSERT_TRUE(status.IsOK());
+      if_then = graph.ToGraphProto();
+      std::string model_file_name = "asdfasdf_if_then.onnx";
+      status = onnxruntime::Model::Save(model, model_file_name);
+      ASSERT_TRUE(status.IsOK());
+    }
+  }
+
+  // If inside If
+  ONNX_NAMESPACE::GraphProto iii_then;
+  //ONNX_NAMESPACE::GraphProto iii_else;
+  {
+    ONNX_NAMESPACE::TypeProto float_tensor;
+    float_tensor.mutable_tensor_type()->set_elem_type(ONNX_NAMESPACE::TensorProto_DataType_FLOAT);
+    float_tensor.mutable_tensor_type()->mutable_shape()->add_dim()->set_dim_param("__iii_then__unknown");
+
+    onnxruntime::Model model("graph_if_else___then", false, DefaultLoggingManager().DefaultLogger());
+    auto& graph = model.MainGraph();
+    auto& data_0 = graph.GetOrCreateNodeArg("data_0", &float_tensor);
+    auto& graph_if_output_else = graph.GetOrCreateNodeArg("graph_if_output_else", &float_tensor);
+    auto& output = graph.GetOrCreateNodeArg("graph_if_else___then_output", &float_tensor);
+    graph.AddOuterScopeNodeArg("data_0");
+    graph.AddOuterScopeNodeArg("graph_if_output_else");
+    {
+      std::vector<onnxruntime::NodeArg*> inputs = {&graph_if_output_else, &data_0};
+      std::vector<onnxruntime::NodeArg*> outputs = {&output};
+      graph.AddNode("add_1", "Add", "node add", inputs, outputs);
+    }
+    auto status = graph.Resolve();
+    ASSERT_TRUE(status.IsOK());
+    iii_then = graph.ToGraphProto();
+    std::string model_file_name = "asdfasdf_if_else__then.onnx";
+    status = onnxruntime::Model::Save(model, model_file_name);
+    ASSERT_TRUE(status.IsOK());
+  }
+  // {
+  //     ONNX_NAMESPACE::TypeProto float_tensor;
+  //     float_tensor.mutable_tensor_type()->set_elem_type(ONNX_NAMESPACE::TensorProto_DataType_FLOAT);
+
+  //     onnxruntime::Model model("graph_if_else___else", false, DefaultLoggingManager().DefaultLogger());
+  //     auto& graph = model.MainGraph();
+  //     auto& graph_if_output_else = graph.GetOrCreateNodeArg("graph_if_output_else", &float_tensor);
+  //     auto& output = graph.GetOrCreateNodeArg("graph_if_else___else_output", nullptr);
+  //     graph.AddOuterScopeNodeArg("graph_if_output_else");
+  //     {
+  //       std::vector<onnxruntime::NodeArg*> inputs = { &graph_if_output_else };
+  //       std::vector<onnxruntime::NodeArg*> outputs = { &output };
+  //       graph.AddNode("abs_1", "Abs", "node abs", inputs, outputs);
+  //     }
+  //     auto status = graph.Resolve();
+  //     ASSERT_TRUE(status.IsOK());
+  //     iii_else = graph.ToGraphProto();
+  //     std::string model_file_name = "asdfasdf_if_else__else.onnx";
+  //     status = onnxruntime::Model::Save(model, model_file_name);
+  //     ASSERT_TRUE(status.IsOK());
+  // }
+
+  ONNX_NAMESPACE::GraphProto if_else;
+  {
+    onnxruntime::Model model("graph_if_else", false, DefaultLoggingManager().DefaultLogger());
+    auto& graph = model.MainGraph();
+    {
+      ONNX_NAMESPACE::TypeProto float_tensor;
+      float_tensor.mutable_tensor_type()->set_elem_type(ONNX_NAMESPACE::TensorProto_DataType_FLOAT);
+      float_tensor.mutable_tensor_type()->mutable_shape()->add_dim()->set_dim_param("__graph_if_else__unknown");
+      ONNX_NAMESPACE::TypeProto bool_tensor;
+      bool_tensor.mutable_tensor_type()->set_elem_type(ONNX_NAMESPACE::TensorProto_DataType_BOOL);
+
+      auto& graph_if_input = graph.GetOrCreateNodeArg("graph_if_input", &float_tensor);
+      auto& if_cond_input = graph.GetOrCreateNodeArg("if_cond_input", &bool_tensor);
+      auto& data_0 = graph.GetOrCreateNodeArg("data_0", nullptr);
+      auto& node_1 = graph.GetOrCreateNodeArg("graph_if_else_node_1", nullptr);
+      auto& node_2 = graph.GetOrCreateNodeArg("graph_if_else_node_2", nullptr);
+      //auto& node_3 = graph.GetOrCreateNodeArg("graph_if_else_node_3", nullptr);
+      auto& node_4 = graph.GetOrCreateNodeArg("graph_if_else_node_4", &float_tensor);
+      auto& graph_if_output = graph.GetOrCreateNodeArg("graph_if_output_else", &float_tensor);
+      graph.AddOuterScopeNodeArg("graph_if_input");
+      graph.AddOuterScopeNodeArg("if_cond_input");
+      graph.AddOuterScopeNodeArg("data_0");
+      //graph.AddOuterScopeNodeArg("graph_if_else_node_4");
+
+      {
+        std::vector<onnxruntime::NodeArg*> inputs = {&graph_if_input};
+        std::vector<onnxruntime::NodeArg*> outputs = {&node_1};
+        graph.AddNode("shape_1", "Shape", "node 1", inputs, outputs);
+      }
+      {
+        std::vector<onnxruntime::NodeArg*> inputs = {&node_1};
+        std::vector<onnxruntime::NodeArg*> outputs = {&node_2};
+        auto& cast_node = graph.AddNode("cast_1", "Cast", "node 2", inputs, outputs);
+        ONNX_NAMESPACE::AttributeProto to;
+        to.set_name("to");
+        to.set_type(ONNX_NAMESPACE::AttributeProto_AttributeType::AttributeProto_AttributeType_INT);
+        to.set_i(static_cast<int64_t>(ONNX_NAMESPACE::TensorProto_DataType_FLOAT));
+        cast_node.AddAttribute("to", to);
+      }
+      {
+        std::vector<onnxruntime::NodeArg*> inputs = {&node_2, &data_0};
+        std::vector<onnxruntime::NodeArg*> outputs = {&graph_if_output};
+        graph.AddNode("sub_1", "Sub", "node 3", inputs, outputs);
+      }
+      // {
+      //   std::vector<onnxruntime::NodeArg*> inputs = { &graph_if_input };
+      //   std::vector<onnxruntime::NodeArg*> outputs = { &node_3 };
+      //   auto& cast_node = graph.AddNode("cast_2", "Cast", "node 2", inputs, outputs);
+      //   ONNX_NAMESPACE::AttributeProto to;
+      //   to.set_name("to");
+      //   to.set_type(ONNX_NAMESPACE::AttributeProto_AttributeType::AttributeProto_AttributeType_INT);
+      //   to.set_i(static_cast<int64_t>(ONNX_NAMESPACE::TensorProto_DataType_FLOAT));
+      //   cast_node.AddAttribute("to", to);
+      // }
+      // {
+      //   std::vector<onnxruntime::NodeArg*> inputs = { &graph_if_input, &data_0 };
+      //   std::vector<onnxruntime::NodeArg*> outputs = { &node_4 };
+      //   graph.AddNode("sub_2", "Sub", "node 4", inputs, outputs);
+      // }
+      {
+        std::vector<onnxruntime::NodeArg*> inputs = {&if_cond_input};
+        std::vector<onnxruntime::NodeArg*> outputs = {&node_4};
+
+        auto& if_node = graph.AddNode("if_inside_if", "If", "If node", inputs, outputs);
+
+        if_node.AddAttribute("then_branch", iii_then);
+        if_node.AddAttribute("else_branch", iii_then);
+      }
+
+      {
+        std::vector<const onnxruntime::NodeArg*> outputs = {&node_4};
+        graph.SetOutputs(outputs);
+      }
+
+      auto status = graph.Resolve();
+      ASSERT_TRUE(status.IsOK());
+      if_else = graph.ToGraphProto();
+      std::string model_file_name = "asdfasdf_if_else.onnx";
+      status = onnxruntime::Model::Save(model, model_file_name);
+      ASSERT_TRUE(status.IsOK());
+    }
+  }
+
+  {
+    onnxruntime::Model model("graph_1", false, DefaultLoggingManager().DefaultLogger());
+    auto& graph = model.MainGraph();
+
+    //ONNX_NAMESPACE::TypeProto float_tensor;
+    //float_tensor.mutable_tensor_type()->set_elem_type(ONNX_NAMESPACE::TensorProto_DataType_FLOAT);
+    ////float_tensor.mutable_tensor_type()->mutable_shape()->add_dim()->set_dim_param("__unknown");
+    //ONNX_NAMESPACE::TypeProto bool_tensor;
+    //bool_tensor.mutable_tensor_type()->set_elem_type(ONNX_NAMESPACE::TensorProto_DataType_BOOL);
+    ////bool_tensor.mutable_tensor_type()->mutable_shape()->add_dim()->set_dim_value(1);
+
+    //auto& if_cond_input = graph.GetOrCreateNodeArg("if_cond_input", &bool_tensor);
+    //auto& graph_if_input = graph.GetOrCreateNodeArg("graph_if_input", nullptr);
+    //auto& if_cond_output = graph.GetOrCreateNodeArg("if_cond_output", &float_tensor);
+
+    //{
+    //  std::vector<onnxruntime::NodeArg*> inputs = {&if_cond_input};
+    //  std::vector<onnxruntime::NodeArg*> outputs = {&graph_if_input};
+    //  auto& cast_node = graph.AddNode("cast_9", "Cast", "node 2", inputs, outputs);
+    //  ONNX_NAMESPACE::AttributeProto to;
+    //  to.set_name("to");
+    //  to.set_type(ONNX_NAMESPACE::AttributeProto_AttributeType::AttributeProto_AttributeType_INT);
+    //  to.set_i(static_cast<int64_t>(ONNX_NAMESPACE::TensorProto_DataType_FLOAT));
+    //  cast_node.AddAttribute("to", to);
+    //}
+
+    //std::vector<onnxruntime::NodeArg*> inputs = {&if_cond_input};
+    //std::vector<onnxruntime::NodeArg*> outputs = {&if_cond_output};
+
+    //auto& if_node = graph.AddNode("if", "If", "If node", inputs, outputs);
+
+    //if_node.AddAttribute("then_branch", if_then);
+    //if_node.AddAttribute("else_branch", if_else);
+
+    {
+      ONNX_NAMESPACE::TypeProto float_tensor_input;
+      float_tensor_input.mutable_tensor_type()->set_elem_type(ONNX_NAMESPACE::TensorProto_DataType_FLOAT);
+      ONNX_NAMESPACE::TypeProto float_tensor;
+      float_tensor.mutable_tensor_type()->set_elem_type(ONNX_NAMESPACE::TensorProto_DataType_FLOAT);
+      float_tensor.mutable_tensor_type()->mutable_shape()->add_dim()->set_dim_param("__graph_if_else__unknown");
+      ONNX_NAMESPACE::TypeProto bool_tensor;
+      bool_tensor.mutable_tensor_type()->set_elem_type(ONNX_NAMESPACE::TensorProto_DataType_BOOL);
+
+      //auto& graph_if_input = graph.GetOrCreateNodeArg("graph_if_input", &float_tensor);
+      auto& if_cond_input = graph.GetOrCreateNodeArg("if_cond_input", &bool_tensor);
+      auto& data_0 = graph.GetOrCreateNodeArg("data_0", &float_tensor_input);
+      auto& node_1 = graph.GetOrCreateNodeArg("graph_if_else_node_1", nullptr);
+      auto& node_2 = graph.GetOrCreateNodeArg("graph_if_else_node_2", nullptr);
+      //auto& node_3 = graph.GetOrCreateNodeArg("graph_if_else_node_3", nullptr);
+      auto& node_4 = graph.GetOrCreateNodeArg("graph_if_else_node_4", &float_tensor);
+      auto& graph_if_output = graph.GetOrCreateNodeArg("graph_if_output_else", &float_tensor);
+      //graph.AddOuterScopeNodeArg("graph_if_input");
+      //graph.AddOuterScopeNodeArg("if_cond_input");
+      //graph.AddOuterScopeNodeArg("data_0");
+      //graph.AddOuterScopeNodeArg("graph_if_else_node_4");
+
+      {
+        std::vector<onnxruntime::NodeArg*> inputs = {&if_cond_input};
+        std::vector<onnxruntime::NodeArg*> outputs = {&node_1};
+        graph.AddNode("shape_1", "Shape", "node 1", inputs, outputs);
+      }
+      {
+        std::vector<onnxruntime::NodeArg*> inputs = {&node_1};
+        std::vector<onnxruntime::NodeArg*> outputs = {&node_2};
+        auto& cast_node = graph.AddNode("cast_1", "Cast", "node 2", inputs, outputs);
+        ONNX_NAMESPACE::AttributeProto to;
+        to.set_name("to");
+        to.set_type(ONNX_NAMESPACE::AttributeProto_AttributeType::AttributeProto_AttributeType_INT);
+        to.set_i(static_cast<int64_t>(ONNX_NAMESPACE::TensorProto_DataType_FLOAT));
+        cast_node.AddAttribute("to", to);
+      }
+      {
+        std::vector<onnxruntime::NodeArg*> inputs = {&node_2, &data_0};
+        std::vector<onnxruntime::NodeArg*> outputs = {&graph_if_output};
+        graph.AddNode("sub_1", "Sub", "node 3", inputs, outputs);
+      }
+      // {
+      //   std::vector<onnxruntime::NodeArg*> inputs = { &graph_if_input };
+      //   std::vector<onnxruntime::NodeArg*> outputs = { &node_3 };
+      //   auto& cast_node = graph.AddNode("cast_2", "Cast", "node 2", inputs, outputs);
+      //   ONNX_NAMESPACE::AttributeProto to;
+      //   to.set_name("to");
+      //   to.set_type(ONNX_NAMESPACE::AttributeProto_AttributeType::AttributeProto_AttributeType_INT);
+      //   to.set_i(static_cast<int64_t>(ONNX_NAMESPACE::TensorProto_DataType_FLOAT));
+      //   cast_node.AddAttribute("to", to);
+      // }
+      // {
+      //   std::vector<onnxruntime::NodeArg*> inputs = { &graph_if_input, &data_0 };
+      //   std::vector<onnxruntime::NodeArg*> outputs = { &node_4 };
+      //   graph.AddNode("sub_2", "Sub", "node 4", inputs, outputs);
+      // }
+      {
+        std::vector<onnxruntime::NodeArg*> inputs = {&if_cond_input};
+        std::vector<onnxruntime::NodeArg*> outputs = {&node_4};
+
+        auto& if_node = graph.AddNode("if_inside_if", "If", "If node", inputs, outputs);
+
+        if_node.AddAttribute("then_branch", iii_then);
+        if_node.AddAttribute("else_branch", iii_then);
+      }
+    }
+
+    // ONNX_NAMESPACE::TensorProto init{};
+    // init.set_name("if_cond_input");
+    // init.set_data_type(ONNX_NAMESPACE::TensorProto_DataType_BOOL);
+    // init.add_bool8_data(0);
+    // graph.AddInitializedTensor(init);
+
+    // ONNX_NAMESPACE::TensorProto graph_if_input{};
+    // graph_if_input.add_dims(1);
+    // graph_if_input.set_name("graph_if_input");
+    // graph_if_input.set_data_type(ONNX_NAMESPACE::TensorProto_DataType_FLOAT);
+    // graph_if_input.add_float_data(0);
+    // graph.AddInitializedTensor(graph_if_input);
+    //ONNX_NAMESPACE::TensorProto data_0{};
+    //data_0.set_name("data_0");
+    //data_0.add_dims(1);
+    //data_0.set_data_type(ONNX_NAMESPACE::TensorProto_DataType_FLOAT);
+    //data_0.add_float_data(0);
+    //graph.AddInitializedTensor(data_0);
+
+    auto status = graph.Resolve();
+    ASSERT_TRUE(status.IsOK());
+    std::string model_file_name = "asdfasdf.onnx";
+    status = onnxruntime::Model::Save(model, model_file_name);
+    ASSERT_TRUE(status.IsOK());
+  }
+
+  std::string model_file_name = "asdfasdf.onnx";
+  SessionOptions so;
+  so.session_logid = "TEST300.T300";
+  InferenceSession session_object{so};
+
+  CUDAExecutionProviderInfo epi;
+  epi.device_id = 0;
+  EXPECT_TRUE(session_object.RegisterExecutionProvider(onnxruntime::make_unique<CUDAExecutionProvider>(epi)).IsOK());
+
+  auto status = session_object.Load(model_file_name);
+  ASSERT_TRUE(status.IsOK());
+  status = session_object.Initialize();
+  ASSERT_TRUE(status.IsOK());
+
+  RunOptions run_options;
+  run_options.run_tag = so.session_logid;
+
+  std::vector<int64_t> dim = {1};
+  std::vector<bool> va = {false};
+  OrtValue ml_value_x;
+  CreateMLValue<bool>(TestCPUExecutionProvider()->GetAllocator(0, OrtMemTypeDefault), dim, va,
+                      &ml_value_x);
+  std::vector<float> vd = {0.0f};
+  OrtValue ml_value_data;
+  CreateMLValue<float>(TestCPUExecutionProvider()->GetAllocator(0, OrtMemTypeDefault), dim, vd,
+                       &ml_value_data);
+  NameMLValMap feeds;
+  feeds.insert(std::make_pair("if_cond_input", ml_value_x));
+  feeds.insert(std::make_pair("data_0", ml_value_data));
+
+  // prepare outputs
+  std::vector<std::string> output_names;
+  output_names.push_back("graph_if_else_node_4");
+  std::vector<OrtValue> fetches;
+
+  // prepare expected inputs and outputs
+  std::vector<int64_t> expected_dims_mul_m = {1};
+  std::vector<float> expected_values_mul_m = {1.0f};
+
+  // Now run
+  status = session_object.Run(run_options, feeds, output_names, &fetches);
   ASSERT_TRUE(status.IsOK());
   VerifyOutputs(fetches, expected_dims_mul_m, expected_values_mul_m);
 }

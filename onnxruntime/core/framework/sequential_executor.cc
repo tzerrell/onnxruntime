@@ -92,7 +92,9 @@ Status SequentialExecutor::Execute(const SessionState& session_state, const std:
 
     auto node_index = node_exec_plan.node_index;
     const auto& node = *graph_viewer->GetNode(node_exec_plan.node_index);
-
+    if (node.Name() == "Postprocessor/BatchMultiClassNonMaxSuppression/map/while/PadOrClipBoxList/cond_3/sub") {
+      // raise(SIGINT);
+    }
 #ifdef CONCURRENCY_VISUALIZER
     series.write_flag(node.Name().c_str());
 #endif

@@ -147,6 +147,9 @@ common::Status If::SetupSubgraphExecutionInfo(const SessionState& session_state,
   ORT_ENFORCE(info == nullptr, "SetupSubgraphExecutionInfo should only be called once for each subgraph.");
 
   const auto& node = Node();
+  if (node.Name() == "Postprocessor/BatchMultiClassNonMaxSuppression/map/while/PadOrClipBoxList/cond_3_If__83") {
+    // raise(SIGINT);
+  }
   info = onnxruntime::make_unique<If::Info>(node, *subgraph_session_state.GetGraphViewer());
 
   // all inputs for the If subgraph are implicit

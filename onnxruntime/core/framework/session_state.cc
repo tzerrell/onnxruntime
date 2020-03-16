@@ -186,6 +186,9 @@ bool SessionState::GetEnableMemoryPattern() const { return enable_mem_pattern_; 
 common::Status SessionState::AddInputNameToNodeInfoMapping(const std::string& input_name, const NodeInfo& node_info) {
   // Graph partitioning should ensure an input is only consumed from one device. Copy nodes should have been inserted
   // to handle a scenario where an input is required on different devices by different nodes. Validate that.
+  //if (input_name == "Postprocessor/BatchMultiClassNonMaxSuppression/map/while/PadOrClipBoxList/cond_1/cond/sub/x:0") {
+    // printf("Adding: [%s][%s] device=%s\n", node_info.p_node->Name().c_str(), input_name.c_str(), node_info.device->ToString().c_str());
+  //}
   auto& entries = input_names_to_nodeinfo_mapping_[input_name];
 
   if (entries.empty()) {

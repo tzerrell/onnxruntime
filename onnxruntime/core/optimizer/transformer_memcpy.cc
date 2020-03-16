@@ -184,12 +184,15 @@ void TransformerMemcpyImpl::ProcessDefs(onnxruntime::Node& node, const KernelReg
             initializers_consumed[arg.Name()] = initializer_tensor_proto;
           }
 
-          // implicit inputs have no location info in the kernel def, so treat them as provider inputs.
-          // PlannerImpl::ComputeUseCounts has matching logic so the allocation plan does the same thing
-          if (!is_implicit_input && kci && kci->kernel_def->IsInputOnCpu(index)) {
-            non_provider_input_defs_.insert(&arg);
-          } else {
-            provider_input_defs_.insert(&arg);
+          // no. we do nothing to implicit inputs
+          if (!is_implicit_input) {
+            // implicit inputs have no location info in the kernel def, so treat them as provider inputs.
+            // PlannerImpl::ComputeUseCounts has matching logic so the allocation plan does the same thing
+            if (!is_implicit_input && kci && kci->kernel_def->IsInputOnCpu(index)) {
+              non_provider_input_defs_.insert(&arg);
+            } else {
+              provider_input_defs_.insert(&arg);
+            }
           }
 
           return Status::OK();

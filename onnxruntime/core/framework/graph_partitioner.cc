@@ -75,6 +75,7 @@ static Node* PlaceNode(Graph& graph, std::unique_ptr<IndexedSubGraph> capability
     if (nullptr != node && node->GetExecutionProviderType().empty()) {
       // The node was not fused or assigned. Assign it to this <provider>.
       node->SetExecutionProviderType(provider_type);
+      // printf("[Partition] SetExecutionProviderType {%s}: %s\n", node->Name().c_str(), provider_type.c_str());
     }
   } else {
     // The <provider> can run a fused <sub_graph> in the <graph>.

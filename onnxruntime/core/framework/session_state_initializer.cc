@@ -104,6 +104,7 @@ common::Status SessionStateInitializer::CreatePlan(
   graph_.CleanAllInitializedTensors();
 
   ORT_RETURN_IF_ERROR(session_state_.CreateKernels(kernel_registry_manager_));
+  // printf("SaveInputOutputNamesToNodeMapping: %s\n", parent_node ? parent_node->Name().c_str() : "(null)");
   ORT_RETURN_IF_ERROR(
       SaveInputOutputNamesToNodeMapping(graph_, kernel_registry_manager_, session_state_, outer_scope_node_args));
   return Status::OK();
@@ -302,6 +303,9 @@ common::Status SaveInputOutputNamesToNodeMapping(const onnxruntime::Graph& graph
         ORT_RETURN_IF_ERROR(name_to_id.GetIdx(input_def->Name(), arg_index));
         auto& device = exec_plan->GetLocation(arg_index).device;
         SessionState::NodeInfo node_info(std::numeric_limits<size_t>::max(), &node, kci, device);
+        if (input_def->Name() == "Postprocessor/BatchMultiClassNonMaxSuppression/map/while/PadOrClipBoxList/cond_1/cond/sub/x:0") {
+
+        }
         ORT_RETURN_IF_ERROR(session_state.AddInputNameToNodeInfoMapping(input_def->Name(), node_info));
       }
     }

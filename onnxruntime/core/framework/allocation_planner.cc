@@ -417,6 +417,9 @@ class PlannerImpl {
       auto process_input = [&graph_inputs, &exec_provider, &p_kernel_def, &is_implicit_input,
                             this](const NodeArg& input, size_t arg_idx) {
         const auto& name = input.Name();
+        // if (name == "data_0") {
+        //   printf("");
+        // }
         UseCount(name)++;
 
         // If it's a graph input or outer scope node arg, set its plan.
@@ -429,10 +432,15 @@ class PlannerImpl {
                          }) != outer_scope_node_args_.cend()) {
           OrtValueIndex index = Index(name);
 
-          // implicit inputs do not have an entry in the kernel def so we use the default memory type.
-          // matching logic is used in TransformerMemcpyImpl::ProcessDefs
-          OrtMemType mem_type = is_implicit_input ? OrtMemTypeDefault : p_kernel_def->InputMemoryType(arg_idx);
-          plan_.SetLocation(static_cast<size_t>(index), exec_provider->GetAllocator(0, mem_type)->Info());
+          // no. we do nothing to implicit inputs
+          if (!is_implicit_input) {
+            // implicit inputs do not have an entry in the kernel def so we use the default memory type.
+            // matching logic is used in TransformerMemcpyImpl::ProcessDefs
+            OrtMemType mem_type = is_implicit_input ? OrtMemTypeDefault : p_kernel_def->InputMemoryType(arg_idx);
+            // auto& asdf = exec_provider->GetAllocator(0, mem_type)->Info();
+            plan_.SetLocation(static_cast<size_t>(index), exec_provider->GetAllocator(0, mem_type)->Info());
+            // printf("SetLocation [%s]: %s\n", name.c_str(), asdf.ToString().c_str());
+          }
         }
 
         return Status::OK();
@@ -451,8 +459,10 @@ class PlannerImpl {
         OrtValueIndex index = Index(node_output->Name());
         ProcessDef(index, node_output);
         ++UseCount(index);
+        auto& asdf = exec_provider->GetAllocator(0, p_kernel_def->OutputMemoryType(i))->Info();
         plan_.SetLocation(static_cast<size_t>(index),
-                          exec_provider->GetAllocator(0, p_kernel_def->OutputMemoryType(i))->Info());
+                          asdf);
+        // printf("SetLocation [%s]: %s\n", node_output->Name().c_str(), asdf.ToString().c_str());
       }
 
       // if sync is needed, mark allocation plan as create_fence_if_async=true
@@ -528,6 +538,9 @@ class PlannerImpl {
 
     auto setup_preexisting = [this](const NodeArg* node_arg) {
       auto input_index = Index(node_arg->Name());
+      if (node_arg->Name() == "Postprocessor/BatchMultiClassNonMaxSuppression/map/while/PadOrClipBoxList/cond_1/cond/sub/x:0") {
+        //raise(SIGINT);
+      }
       AllocPlanPerValue& thisplan = AllocPlan(input_index);
       thisplan.alloc_kind = AllocKind::kPreExisting;
       thisplan.value_type = utils::GetMLDataType(*node_arg);
@@ -551,6 +564,9 @@ class PlannerImpl {
     for (size_t program_counter = 0; program_counter < execution_plan.size(); ++program_counter) {
       SequentialExecutionPlan::NodeExecutionPlan step = execution_plan[program_counter];
       auto pnode = graph_viewer_.GetNode(step.node_index);
+      if (pnode->Name() == "Postprocessor/BatchMultiClassNonMaxSuppression/map/while/PadOrClipBoxList/cond_3/sub") {
+        // raise(SIGINT);
+      }
       // graph outputs
       auto& graph_outputs = graph_viewer_.GetOutputs();
       // determine allocation for outputs of pnode
@@ -558,6 +574,11 @@ class PlannerImpl {
       for (auto node_output : pnode->OutputDefs()) {
         if (!node_output->Exists()) continue;
         auto current = Index(node_output->Name());
+
+        if (node_output->Name() == "Postprocessor/BatchMultiClassNonMaxSuppression/map/while/PadOrClipBoxList/cond_1/cond/sub/x:0") {
+          // raise(SIGINT);
+        }
+
         AllocPlan(current).value_type = utils::GetMLDataType(*node_output);
         OrtValueIndex reused;
         if (std::find(graph_outputs.begin(), graph_outputs.end(), node_output) != graph_outputs.end()) {
