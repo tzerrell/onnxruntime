@@ -3,7 +3,7 @@
 
 #include "core/providers/cpu/ml/linearclassifier.h"
 #include "core/providers/cpu/math/gemm.h"
-
+#include "core/platform/threadpool.h"
 namespace onnxruntime {
 namespace ml {
 
@@ -93,23 +93,52 @@ void LinearClassifier::ComputeImpl(const gsl::span<const float> input,
       }
     }
   } else {
-    for (int64_t i = 0; i < num_batches; ++i) {
-      int maxclass = 0;
-      float maxweight = *score++;
+    std::string* string_label = using_strings_ ? labels_output.MutableData<std::string>() : nullptr;
+    int64_t* int_label = using_strings_ ? nullptr : labels_output.MutableData<int64_t>();
 
-      for (int j = 1; j < num_targets; ++j, ++score) {
-        if (*score > maxweight) {
-          maxweight = *score;
-          maxclass = j;
+    auto num_items = num_batches * num_targets;
+    // arbitrarily do at least 2048 (2^11 == 2048) items per thread
+    auto num_threads = std::max(std::min(static_cast<int32_t>(num_items >> 11),
+                                         (threadpool != nullptr ? threadpool->NumThreads() : 1)),
+                                1);
+
+    auto choose_labels = [&](int batch_index) {
+      int64_t start_batch = batch_index * num_items / num_threads;
+      int64_t end_batch = (batch_index + 1) * num_items / num_threads;
+
+      //std::ostringstream oss;
+      //oss << "batch_index:" << batch_index << " start:" << start_batch << " end:" << end_batch << "\n";
+      //std::cout << oss.str();
+
+      float* s = score + (start_batch * num_targets);
+      std::string* s_label = using_strings_ ? string_label + start_batch : nullptr;
+      int64_t* i_label = using_strings_ ? nullptr : int_label + start_batch;
+
+      for (int64_t i = start_batch; i < end_batch; ++i) {
+        int maxclass = 0;
+        float maxweight = *s++;
+
+        for (int j = 1; j < num_targets; ++j) {
+          auto this_score = *s++;
+          if (this_score > maxweight) {
+            maxweight = this_score;
+            maxclass = j;
+          }
+        }
+
+        if (using_strings_) {
+          *s_label++ = classlabels_strings_[maxclass];
+        } else {
+          *i_label++ = classlabels_ints_[maxclass];
         }
       }
+    };
 
-      if (using_strings_) {
-        labels_output.MutableData<std::string>()[i] = classlabels_strings_[maxclass];
-      } else {
-        labels_output.MutableData<int64_t>()[i] = classlabels_ints_[maxclass];
-      }
-    }
+    //std::cout << "num_items:" << num_items << " num_threads:" << num_threads << "\n";
+    if (num_threads == 1)
+      choose_labels(0);
+    else
+      concurrency::ThreadPool::TryBatchParallelFor(threadpool, num_threads, choose_labels, num_threads);
   }
 
   if (post_transform != POST_EVAL_TRANSFORM::NONE || add_second_class) {
