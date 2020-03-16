@@ -96,6 +96,8 @@ void LinearClassifier::ComputeImpl(const gsl::span<const float> input,
     std::string* string_label = using_strings_ ? labels_output.MutableData<std::string>() : nullptr;
     int64_t* int_label = using_strings_ ? nullptr : labels_output.MutableData<int64_t>();
 
+#define LC_THREADED
+#ifdef LC_THREADED
     auto num_items = num_batches * num_targets;
     // arbitrarily do at least 2048 (2^11 == 2048) items per thread
     auto num_threads = std::max(std::min(static_cast<int32_t>(num_items >> 11),
@@ -103,11 +105,12 @@ void LinearClassifier::ComputeImpl(const gsl::span<const float> input,
                                 1);
 
     auto choose_labels = [&](int batch_index) {
-      int64_t start_batch = batch_index * num_items / num_threads;
-      int64_t end_batch = (batch_index + 1) * num_items / num_threads;
+      int64_t start_batch = batch_index * num_batches / num_threads;
+      int64_t end_batch = (batch_index + 1) * num_batches / num_threads;
 
       //std::ostringstream oss;
-      //oss << "batch_index:" << batch_index << " start:" << start_batch << " end:" << end_batch << "\n";
+      //oss << "num_items:" << num_items << " num_batches:" << num_batches << " num_threads:" << num_threads
+      //    << " batch_index : " << batch_index << " start : " << start_batch << " end : " << end_batch << "\n ";
       //std::cout << oss.str();
 
       float* s = score + (start_batch * num_targets);
@@ -134,11 +137,25 @@ void LinearClassifier::ComputeImpl(const gsl::span<const float> input,
       }
     };
 
-    //std::cout << "num_items:" << num_items << " num_threads:" << num_threads << "\n";
     if (num_threads == 1)
       choose_labels(0);
     else
       concurrency::ThreadPool::TryBatchParallelFor(threadpool, num_threads, choose_labels, num_threads);
+#else
+    Eigen::MatrixXf::Index max_index;
+    auto matrixData = ConstEigenMatrixMapRowMajor<float>(score, num_batches, num_targets);
+    if (using_strings_)
+      for (int i = 0; i < num_batches; ++i) {
+        matrixData.row(i).maxCoeff(&max_index);
+        *string_label++ = classlabels_strings_[max_index];
+      }
+    else {
+      for (int i = 0; i < num_batches; ++i) {
+        matrixData.row(i).maxCoeff(&max_index);
+        *int_label++ = classlabels_ints_[max_index];
+      }
+    }
+#endif
   }
 
   if (post_transform != POST_EVAL_TRANSFORM::NONE || add_second_class) {
