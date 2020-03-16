@@ -189,7 +189,7 @@ void InferenceSession::ConstructorCommon(const SessionOptions& session_options,
     inter_op_thread_pool_from_env_ = session_env.GetInterOpThreadPool();
     ORT_ENFORCE(session_env.EnvCreatedWithGlobalThreadPools() == true,
                 "When the session is not configured to use per session"
-                "threadpools, the env must be created with the the CreateEnvWithGlobalThreadPools API.");
+                " threadpools, the env must be created with the the CreateEnvWithGlobalThreadPools API.");
     LOGS(*session_logger_, INFO) << "Using global/env threadpools since use_per_session_threads_ is false";
   }
 
